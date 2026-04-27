@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ANKETA.FORUM</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+:root{
+  --bg:#0d0d0f; --bg2:#141416; --bg3:#1a1a1e;
+  --card:#1e1e24; --card2:#252530;
+  --border:#2d2d3a; --border2:#383848;
+  --accent:#e8632a; --accent-h:#f07540; --accent2:#5865f2;
+  --green:#3ba55d; --red:#ed4245; --yellow:#faa61a;
+  --text:#dcddde; --text2:#b9bbbe; --muted:#72767d;
+  --white:#fff; --font:'Inter',sans-serif;
+  --r:6px; --r2:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+button{font-family:var(--font);cursor:pointer;border:none;outline:none}
+input,textarea,select{font-family:var(--font);outline:none}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+.page-wrap{display:flex;flex-direction:column;min-height:100vh}
+.main-layout{display:flex;flex:1;max-width:1200px;margin:0 auto;width:100%;padding:16px;gap:16px}
+.sidebar{width:220px;flex-shrink:0}
+.content{flex:1;min-width:0}
+.right-sidebar{width:200px;flex-shrink:0}
+
+.site-header{background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200}
+.header-inner{max-width:1200px;margin:0 auto;padding:0 16px;display:flex;align-items:center;gap:12px;height:48px}
+.site-logo{font-size:17px;font-weight:700;color:var(--white);display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;text-decoration:none;letter-spacing:-.3px}
+.site-logo .dot{color:var(--accent)}
+.header-nav{display:flex;gap:2px;flex:1;align-items:center;padding-left:8px}
+.hnav-btn{padding:5px 12px;border-radius:var(--r);background:transparent;color:var(--text2);font-size:13px;font-weight:500;transition:all .15s}
+.hnav-btn:hover,.hnav-btn.active{background:var(--card);color:var(--white)}
+.header-search{flex:1;max-width:280px;position:relative}
+.header-search input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);padding:6px 12px 6px 32px;font-size:13px}
+.header-search input::placeholder{color:var(--muted)}
+.header-search input:focus{border-color:var(--accent)}
+.hsearch-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.header-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.hbtn{padding:5px 14px;border-radius:var(--r);font-size:13px;font-weight:500;transition:all .15s}
+.hbtn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.hbtn-ghost:hover{border-color:var(--border2);color:var(--white)}
+.hbtn-accent{background:var(--accent);color:#fff}
+.hbtn-accent:hover{background:var(--accent-h)}
+.user-btn{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border-radius:20px;background:var(--card);border:1px solid var(--border);cursor:pointer;transition:all .15s;position:relative}
+.user-btn:hover{border-color:var(--border2)}
+.user-av-emoji{width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.user-name-chip{font-size:13px;font-weight:600;color:var(--white)}
+.role-chip{font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;letter-spacing:.5px}
+.role-owner{background:#ed424520;color:var(--red);border:1px solid #ed424540}
+.role-admin{background:#ed424520;color:var(--red);border:1px solid #ed424540}
+.role-mod{background:#faa61a20;color:var(--yellow);border:1px solid #faa61a40}
+.role-user{background:#5865f220;color:var(--accent2);border:1px solid #5865f240}
+
+.udrop{position:absolute;top:calc(100%+6px);right:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);min-width:180px;z-index:300;overflow:hidden;display:none;flex-direction:column;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.udrop.open{display:flex}
+.udrop-head{padding:10px 14px;border-bottom:1px solid var(--border)}
+.udrop-uname{font-weight:700;font-size:13px;color:var(--white)}
+.udrop-sub{font-size:11px;color:var(--muted)}
+.udrop-item{padding:9px 14px;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;background:none;text-align:left;width:100%;transition:background .1s}
+.udrop-item:hover{background:var(--card2)}
+.udrop-item.red{color:var(--red)}
+.udrop-sep{height:1px;background:var(--border);margin:3px 0}
+
+.sidebar-block{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:12px;overflow:hidden}
+.sb-title{padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.sb-nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:13px;color:var(--text2);cursor:pointer;transition:all .12s;background:none;border:none;width:100%;text-align:left}
+.sb-nav-item:hover,.sb-nav-item.active{background:var(--card2);color:var(--white)}
+.sb-nav-item.active{border-left:3px solid var(--accent)}
+.sb-nav-item .icon{font-size:15px;width:18px;text-align:center}
+
+.page-title{font-size:18px;font-weight:700;color:var(--white);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+
+.profiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.pcard{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;cursor:pointer;transition:all .15s;position:relative}
+.pcard:hover{border-color:var(--border2);background:var(--card2);transform:translateY(-1px)}
+.pcard-pin{position:absolute;top:8px;right:8px;font-size:11px;color:var(--yellow)}
+.pcard-admin-actions{position:absolute;top:8px;right:8px;display:none;gap:5px;z-index:10}
+.pcard:hover .pcard-admin-actions{display:flex}
+.pcard-admin-btn{width:28px;height:28px;border-radius:8px;background:rgba(20,20,24,.92);border:1px solid var(--border2);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.pcard-admin-btn:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+.pcard-admin-btn.danger:hover{border-color:var(--red);color:var(--red)}
+.pcard.is-hidden{opacity:.55;filter:grayscale(.35)}
+.admin-badge-mini{position:absolute;left:8px;top:8px;font-size:10px;background:#ed424520;color:var(--red);border:1px solid #ed424540;padding:1px 6px;border-radius:4px;z-index:9}
+.quick-admin-panel{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.quick-admin-panel .hint{font-size:12px;color:var(--muted);margin-right:auto}
+
+.pcard-top{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+.pcard-av{width:44px;height:44px;border-radius:50%;background:var(--card2);flex-shrink:0;font-size:20px;display:flex;align-items:center;justify-content:center}
+.pcard-info{flex:1;min-width:0}
+.pcard-name{font-weight:700;font-size:14px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px}
+.pcard-meta{font-size:11px;color:var(--muted);margin-bottom:5px}
+.pcard-tags{display:flex;gap:4px;flex-wrap:wrap}
+.tag{font-size:10px;padding:1px 7px;border-radius:3px;background:var(--card2);color:var(--text2);border:1px solid var(--border)}
+.pcard-bio{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+.filter-row{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.filter-pill{padding:4px 12px;border-radius:var(--r);border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;cursor:pointer;transition:all .12s}
+.filter-pill:hover,.filter-pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.thread-list{display:flex;flex-direction:column;gap:2px}
+.thread-row{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .12s;position:relative}
+.thread-row:hover{background:var(--card2);border-color:var(--border2)}
+.thread-icon{width:36px;height:36px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:var(--card2)}
+.thread-info{flex:1;min-width:0}
+.thread-title{font-weight:600;font-size:13px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.thread-meta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:10px}
+.thread-stats{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.thread-replies{font-size:11px;color:var(--muted)}
+.thread-pinned{color:var(--yellow);font-size:11px}
+.thread-row .thread-admin-actions{display:none;gap:4px;margin-left:8px}
+.thread-row:hover .thread-admin-actions{display:flex}
+
+.fgroup{margin-bottom:14px}
+.flabel{display:block;font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px}
+.finput,.ftextarea,.fselect{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);color:var(--text);padding:8px 12px;font-size:13px;transition:border-color .15s}
+.finput:focus,.ftextarea:focus,.fselect:focus{border-color:var(--accent)}
+.finput::placeholder,.ftextarea::placeholder{color:var(--muted)}
+.ftextarea{resize:vertical;min-height:80px;line-height:1.6}
+.form-row{display:flex;gap:10px}
+.form-row .fgroup{flex:1}
+
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 18px;border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;border:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-h)}
+.btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--border2);color:var(--white)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{background:#c0392b}
+.btn-sm{padding:4px 12px;font-size:12px}
+.btn-block{width:100%;justify-content:center}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;visibility:hidden;opacity:0;pointer-events:none;transition:all .2s}
+.overlay.open{visibility:visible;opacity:1;pointer-events:all}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:mslide .2s ease}
+.modal-lg{max-width:720px}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.modal-title{font-size:16px;font-weight:700;color:var(--white)}
+.modal-close{width:28px;height:28px;border-radius:var(--r);background:var(--card2);border:1px solid var(--border);color:var(--text2);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .12s}
+.modal-close:hover{border-color:var(--red);color:var(--red)}
+.modal-body{padding:18px}
+@keyframes mslide{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+.auth-tabs{display:flex;border-bottom:1px solid var(--border);margin:-18px -18px 18px}
+.atab{flex:1;padding:12px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.atab:hover{color:var(--text)}
+.atab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.auth-panel{display:none}
+.auth-panel.active{display:block}
+.auth-err{font-size:12px;color:var(--red);min-height:16px;margin-bottom:8px}
+
+.profile-header-modal{display:flex;gap:16px;align-items:flex-start;margin-bottom:18px}
+.pm-av{width:72px;height:72px;border-radius:50%;background:var(--card2);font-size:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pm-info{flex:1}
+.pm-name{font-size:20px;font-weight:700;color:var(--white);margin-bottom:2px}
+.pm-sub{font-size:12px;color:var(--muted);margin-bottom:8px}
+.pm-tags{display:flex;gap:5px;flex-wrap:wrap}
+.section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:16px;display:flex;align-items:center;gap:6px}
+.about-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:12px}
+
+.comment-item{display:flex;gap:8px;margin-bottom:10px}
+.cm-av{width:28px;height:28px;border-radius:50%;background:var(--card2);font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cm-bubble{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:0 var(--r2) var(--r2) var(--r2);padding:8px 12px}
+.cm-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.cm-name{font-size:12px;font-weight:700;color:var(--white)}
+.cm-time{font-size:11px;color:var(--muted)}
+.cm-text{font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
+.cm-actions{display:flex;gap:6px;margin-top:5px}
+.cm-act{background:none;border:none;font-size:11px;color:var(--muted);cursor:pointer;padding:2px 4px;border-radius:3px;transition:all .12s}
+.cm-act:hover{background:var(--card);color:var(--text)}
+.cm-act.red:hover{color:var(--red)}
+.comment-input-row{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
+.comment-field-wrap{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;transition:border-color .15s}
+.comment-field-wrap:focus-within{border-color:var(--accent)}
+.comment-field{width:100%;background:transparent;border:none;color:var(--text);padding:8px 12px;font-size:13px;resize:none;min-height:36px;max-height:120px;line-height:1.5}
+.comment-field::placeholder{color:var(--muted)}
+.comment-send{width:32px;height:32px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;margin-bottom:2px}
+.comment-send:hover{background:var(--accent-h);transform:scale(1.05)}
+
+.thread-post{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:10px;overflow:hidden}
+.tp-head{display:flex;gap:0;border-bottom:1px solid var(--border)}
+.tp-sidebar{width:120px;flex-shrink:0;padding:14px;border-right:1px solid var(--border);text-align:center}
+.tp-av{width:52px;height:52px;border-radius:50%;margin:0 auto 6px;background:var(--card2);font-size:24px;display:flex;align-items:center;justify-content:center}
+.tp-username{font-size:12px;font-weight:700;color:var(--white);word-break:break-all}
+.tp-role{font-size:10px;color:var(--muted);margin-top:2px}
+.tp-body{flex:1;padding:14px;min-width:0}
+.tp-meta{font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tp-content{font-size:14px;color:var(--text);line-height:1.75;white-space:pre-wrap;word-wrap:break-word}
+.tp-actions{padding:8px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:13px;padding:10px 20px;border-radius:100px;z-index:1000;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:var(--red)}
+.toast.warn{border-color:var(--yellow);color:var(--yellow)}
+
+.admin-wrap{padding:4px 0}
+.admin-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.astat{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.astat-n{font-size:24px;font-weight:700;margin-bottom:2px}
+.astat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.atabs{display:flex;gap:2px;margin-bottom:12px;background:var(--bg3);border-radius:var(--r);padding:3px;width:fit-content;flex-wrap:wrap}
+.atab2{padding:6px 14px;border-radius:var(--r);font-size:12px;font-weight:600;color:var(--muted);background:none;border:none;cursor:pointer;transition:all .12s}
+.atab2.active{background:var(--card);color:var(--white)}
+.atable-wrap{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;overflow-x:auto}
+.atable{width:100%;border-collapse:collapse}
+.atable th{background:var(--bg3);color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);font-weight:600}
+.atable td{padding:11px 12px;border-bottom:1px solid var(--border);font-size:12px;vertical-align:middle}
+.atable tr:last-child td{border-bottom:none}
+.atable tr{background:var(--card)}
+.atable tr:hover{background:var(--card2)}
+.td-actions{display:flex;gap:4px;flex-wrap:wrap}
+.act-btn{padding:3px 9px;border-radius:var(--r);border:1px solid var(--border);background:none;color:var(--text2);font-size:11px;cursor:pointer;transition:all .12s;font-family:var(--font)}
+.act-btn:hover{border-color:var(--accent);color:var(--accent)}
+.act-btn.d:hover{border-color:var(--red);color:var(--red)}
+.act-btn.g:hover{border-color:var(--green);color:var(--green)}
+.act-btn.y:hover{border-color:var(--yellow);color:var(--yellow)}
+.role-sel{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:11px;padding:3px 6px;border-radius:4px;cursor:pointer}
+.confirm-box{background:var(--card2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;max-width:340px;width:100%;text-align:center}
+.confirm-icon{font-size:32px;margin-bottom:8px}
+.confirm-title{font-weight:700;font-size:15px;color:var(--white);margin-bottom:6px}
+.confirm-txt{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;white-space:pre-line}
+.confirm-btns{display:flex;gap:8px;justify-content:center}
+
+.empty-state{text-align:center;padding:48px 16px;color:var(--muted)}
+.empty-state .icon{font-size:40px;margin-bottom:10px;opacity:.5}
+.empty-state h3{font-size:15px;color:var(--text);margin-bottom:4px}
+
+.site-editor-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+
+/* ══ USER PROFILE PAGE ══ */
+.uprofile-banner{width:100%;height:160px;background:linear-gradient(135deg,var(--card2),var(--bg3));border-radius:var(--r2) var(--r2) 0 0;overflow:hidden;position:relative;cursor:pointer}
+.uprofile-banner img{width:100%;height:100%;object-fit:cover}
+.uprofile-banner-overlay{position:absolute;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;font-size:24px}
+.uprofile-banner:hover .uprofile-banner-overlay{opacity:1}
+.uprofile-head{background:var(--card);border:1px solid var(--border);border-radius:0 0 var(--r2) var(--r2);padding:0 20px 20px;margin-bottom:14px}
+.uprofile-av-wrap{margin-top:-36px;margin-bottom:10px;position:relative;display:inline-block}
+.uprofile-av{width:72px;height:72px;border-radius:50%;border:3px solid var(--card);background:var(--card2);font-size:28px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.uprofile-av img{width:100%;height:100%;object-fit:cover}
+.uprofile-av-edit{position:absolute;bottom:0;right:0;width:22px;height:22px;border-radius:50%;background:var(--accent);border:2px solid var(--card);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer}
+.uprofile-name{font-size:20px;font-weight:800;color:var(--white);margin-bottom:2px}
+.uprofile-handle{font-size:13px;color:var(--muted);margin-bottom:8px}
+.uprofile-status{font-size:13px;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.uprofile-status::before{content:'●';color:var(--green);font-size:8px}
+.uprofile-meta{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.uprofile-meta-item{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.uprofile-bio{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px}
+.uprofile-socials{display:flex;gap:8px;flex-wrap:wrap}
+.social-link{padding:4px 12px;border-radius:var(--r);background:var(--card2);border:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;transition:all .12s;cursor:pointer;text-decoration:none}
+.social-link:hover{border-color:var(--accent);color:var(--accent)}
+.uprofile-stats{display:flex;gap:2px;margin-bottom:14px}
+.uprofile-stat{flex:1;text-align:center;padding:10px;background:var(--bg3);border-radius:var(--r)}
+.uprofile-stat-n{font-size:18px;font-weight:700;color:var(--white)}
+.uprofile-stat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.author-link{cursor:pointer;font-weight:700;color:var(--white);transition:color .12s}
+.author-link:hover{color:var(--accent)}
+.avatar-upload-wrap{position:relative;display:inline-block;cursor:pointer}
+.avatar-upload-wrap:hover .avatar-overlay{opacity:1}
+.avatar-img{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--border)}
+.avatar-img-sm{width:32px;height:32px;border-radius:50%;object-fit:cover}
+.avatar-overlay{position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,.55);
+  display:flex;align-items:center;justify-content:center;font-size:18px;opacity:0;transition:opacity .15s}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin:10px 0}
+.photo-item{position:relative;border-radius:var(--r);overflow:hidden;aspect-ratio:1;background:var(--bg3);cursor:pointer}
+.photo-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}
+.photo-item:hover img{transform:scale(1.05)}
+.photo-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
+  background:rgba(0,0,0,.7);border:none;color:#fff;font-size:12px;cursor:pointer;
+  display:none;align-items:center;justify-content:center}
+.photo-item:hover .photo-del{display:flex}
+.photo-add-btn{border:2px dashed var(--border2);border-radius:var(--r);aspect-ratio:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  color:var(--muted);font-size:11px;cursor:pointer;background:none;transition:all .15s}
+.photo-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+.photo-add-btn .ico{font-size:22px}
+.photo-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:900;
+  display:flex;align-items:center;justify-content:center;cursor:zoom-out}
+.photo-lightbox img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:var(--r)}
+.cm-image{max-width:260px;max-height:240px;border-radius:var(--r);margin-top:6px;cursor:zoom-in;display:block}
+.post-image{max-width:420px;max-height:360px;border-radius:var(--r);margin-top:8px;cursor:zoom-in;display:block}
+.img-attach-preview{position:relative;display:inline-block;margin-top:6px}
+.img-attach-preview img{height:60px;border-radius:var(--r);border:1px solid var(--border)}
+.img-attach-preview .rm{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+  background:var(--red);border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.img-btn{padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:none;
+  color:var(--muted);font-size:13px;cursor:pointer;transition:all .12s}
+.img-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* ══ BOTTOM NAV (mobile) ══ */
+.bottom-nav{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--bg2);border-top:1px solid var(--border);
+  z-index:300;padding:0 4px;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.bottom-nav-inner{display:flex;height:56px}
+.bnav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;background:none;border:none;color:var(--muted);font-size:10px;font-weight:600;
+  letter-spacing:.3px;transition:color .15s;padding:0;cursor:pointer;
+}
+.bnav-btn .bico{font-size:20px;line-height:1}
+.bnav-btn.active,.bnav-btn:active{color:var(--accent)}
+
+/* ══ TABLET ══ */
+@media(max-width:900px){
+  .sidebar,.right-sidebar{display:none}
+  .main-layout{padding:10px}
+  .header-search{display:none}
+}
+
+/* ══ MOBILE ══ */
+@media(max-width:600px){
+  /* header */
+  .site-header{height:auto}
+  .header-inner{height:50px;padding:0 12px;gap:8px}
+  .header-nav{display:none}                   /* убрать — заменяет bottom nav */
+  .header-search{display:none}
+  .hbtn-ghost:not(.mob-show){display:none}    /* убрать лишние кнопки */
+
+  /* user chip — только эмодзи */
+  .user-name-chip,.role-chip{display:none}
+  .user-btn{padding:4px;border-radius:50%}
+
+  /* layout */
+  .main-layout{padding:8px 8px 72px;gap:10px} /* 72px = bottom nav */
+
+  /* profiles grid */
+  .profiles-grid{grid-template-columns:1fr}
+
+  /* cards — крупнее для пальца */
+  .pcard{padding:12px}
+  .pcard-av{width:40px;height:40px;font-size:18px}
+
+  /* thread rows */
+  .thread-row{padding:10px 12px}
+  .thread-icon{width:32px;height:32px;font-size:16px}
+
+  /* modals — полный экран снизу */
+  .overlay{align-items:flex-end;padding:0}
+  .modal{
+    border-radius:var(--r2) var(--r2) 0 0;
+    max-width:100%;max-height:92vh;
+    animation:mslide-mob .25s ease;
+  }
+  @keyframes mslide-mob{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+  /* admin stats grid */
+  .admin-stat-grid{grid-template-columns:repeat(2,1fr)}
+
+  /* site editor */
+  .site-editor-grid{grid-template-columns:1fr}
+
+  /* forum thread sidebar — убрать на мобиле */
+  .tp-sidebar{display:none}
+
+  /* кнопки формы — во всю ширину */
+  .btn-block{width:100%;justify-content:center}
+
+  /* confirm box — во всю ширину снизу */
+  .confirm-box{max-width:100%;border-radius:var(--r2) var(--r2) 0 0}
+
+  /* атабы — скролл */
+  .atabs{overflow-x:auto;flex-wrap:nowrap;width:100%}
+
+  /* показать bottom nav */
+  .bottom-nav{display:block}
+
+  /* toast — выше bottom nav */
+  .toast{bottom:72px}
+
+  /* поиск в мобиле — в контенте */
+  .mob-search-wrap{display:block;margin-bottom:10px}
+  .mob-search-wrap input{
+    width:100%;background:var(--bg3);border:1px solid var(--border);
+    border-radius:var(--r);color:var(--text);padding:8px 12px 8px 34px;
+    font-size:14px;
+  }
+  .mob-search-wrap input:focus{border-color:var(--accent)}
+  .mob-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)}
+
+  /* quick-admin-panel — вертикально */
+  .quick-admin-panel{flex-direction:column;align-items:stretch;gap:6px}
+  .quick-admin-panel .hint{margin-right:0}
+
+  /* thread-admin-actions всегда видны (hover не работает на тач) */
+  .thread-row .thread-admin-actions{display:flex}
+  .pcard-admin-actions{display:flex}
+
+  /* profile modal body */
+  .profile-header-modal{flex-direction:column;align-items:center;text-align:center}
+  .pm-info{text-align:center}
+
+  /* finput — размер шрифта 16px чтобы не зумилось на iOS */
+  .finput,.ftextarea,.fselect{font-size:16px}
+}
+
+/* ══ ОЧЕНЬ МАЛЕНЬКИЕ (≤380px) ══ */
+@media(max-width:380px){
+  .astat-n{font-size:20px}
+  .pcard-name{font-size:13px}
+}
+
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.switch input{display:none}
+.switch .slider{width:34px;height:18px;background:var(--border2);border-radius:18px;position:relative;transition:background .15s}
+.switch .slider::after{content:'';position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}
+.switch input:checked + .slider{background:var(--accent)}
+.switch input:checked + .slider::after{transform:translateX(16px)}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="site-logo" onclick="nav('home')"><span id="hdrLogo">ANKETA</span><span class="dot">.</span><span>FORUM</span></a>
+    <nav class="header-nav">
+      <button class="hnav-btn" id="navHome" onclick="nav('home')">Анкеты</button>
+      <button class="hnav-btn" id="navForum" onclick="nav('forum')">Форум</button>
+    </nav>
+    <div class="header-search">
+      <span class="hsearch-icon">🔍</span>
+      <input type="text" id="globalSearch" placeholder="Поиск..." oninput="render()">
+    </div>
+    <div class="header-right" id="hdrRight"></div>
+  </div>
+</header>
+
+<div class="main-layout">
+  <aside class="sidebar">
+    <div class="sidebar-block">
+      <div class="sb-title">Меню</div>
+      <button class="sb-nav-item" onclick="nav('home')"><span class="icon">🏠</span>Анкеты</button>
+      <button class="sb-nav-item" onclick="nav('forum')"><span class="icon">💬</span>Форум</button>
+      <button class="sb-nav-item" onclick="requireAuth(()=>nav('create'))"><span class="icon">➕</span>Моя анкета</button>
+    </div>
+    <div class="sidebar-block">
+      <div class="sb-title">Статистика</div>
+      <div style="padding:10px 14px;font-size:12px;color:var(--text2)" id="statsBox">
+        <div>👥 <span id="sUsers">0</span> участников</div>
+        <div>📝 <span id="sProfiles">0</span> анкет</div>
+        <div>💬 <span id="sTopics">0</span> тем</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="content" id="mainContent"></main>
+
+  <aside class="right-sidebar">
+    <div class="sidebar-block">
+      <div class="sb-title">Информация</div>
+      <div style="padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.6" id="welcomeBox"></div>
+    </div>
+  </aside>
+</div>
+</div>
+
+<!-- BOTTOM NAV (mobile) -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bnav-btn" id="bnavHome" onclick="nav('home')">
+      <span class="bico">🏠</span>Анкеты
+    </button>
+    <button class="bnav-btn" id="bnavForum" onclick="nav('forum')">
+      <span class="bico">💬</span>Форум
+    </button>
+    <button class="bnav-btn" id="bnavCreate" onclick="requireAuth(()=>nav('create'))">
+      <span class="bico">➕</span>Создать
+    </button>
+    <button class="bnav-btn" id="bnavProfile" onclick="onMobProfile()">
+      <span class="bico" id="bnavProfileIco">👤</span>
+      <span id="bnavProfileLbl">Войти</span>
+    </button>
+  </div>
+</nav>
+
+<!-- USER PROFILE MODAL -->
+<div class="overlay" id="userProfileOverlay">
+  <div class="modal modal-lg">
+    <div class="modal-head"><div class="modal-title" id="userProfileTitle">Профиль</div><button class="modal-close" onclick="closeUserProfile()">✕</button></div>
+    <div class="modal-body" id="userProfileBody" style="padding:0"></div>
+  </div>
+</div>
+
+<div class="overlay" id="authOverlay">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Вход / регистрация</div><button class="modal-close" onclick="closeAuth()">✕</button></div>
+    <div class="modal-body">
+      <div class="auth-tabs">
+        <button class="atab active" id="atLogin" onclick="authTab('login')">Войти</button>
+        <button class="atab" id="atReg" onclick="authTab('reg')">Регистрация</button>
+      </div>
+
+      <div class="auth-panel active" id="apLogin">
+        <div class="auth-err" id="loginErr"></div>
+        <div class="fgroup">
+          <label class="flabel">Логин</label>
+          <input class="finput" id="liUser" placeholder="логин">
+        </div>
+        <div class="fgroup">
+          <label class="flabel">Пароль</label>
+          <input class="finput" id="liPass" type="password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="doLogin()">Войти</button>
+      </div>
+
+      <div class="auth-panel" id="apReg">
+        <div class="auth-err" id="regErr"></div>
+        <div class="fgroup">
+          <label class="flabel">Логин (3-20 символов, латиница)</label>
+          <input class="finput" id="rUser" placeholder="my_login" maxlength="20">
+        </div>
+        <div class="fgroup">
+          <label class="flabel">Отображаемое имя</label>
+          <input class="finput" id="rDisp" placeholder="Как тебя видят" maxlength="30">
+        </div>
+        <div class="fgroup">
+          <label class="flabel">Пароль (мин. 6 символов)</label>
+          <input class="finput" id="rPass" type="password" placeholder="••••••">
+        </div>
+        <div class="fgroup">
+          <label class="flabel">Повтори пароль</label>
+          <input class="finput" id="rPass2" type="password" placeholder="••••••" onkeydown="if(event.key==='Enter')doRegister()">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="doRegister()">Создать аккаунт</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Настройки профиля</div><button class="modal-close" onclick="closeSettings()">✕</button></div>
+    <div class="modal-body" id="settingsBody"></div>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="overlay" id="profileOverlay">
+  <div class="modal modal-lg">
+    <div class="modal-head"><div class="modal-title">Анкета</div><button class="modal-close" onclick="closeProfile()">✕</button></div>
+    <div class="modal-body" id="profileBody"></div>
+  </div>
+</div>
+
+<!-- TOPIC MODAL -->
+<div class="overlay" id="topicOverlay">
+  <div class="modal modal-lg">
+    <div class="modal-head"><div class="modal-title">Тема</div><button class="modal-close" onclick="closeTopic()">✕</button></div>
+    <div class="modal-body" id="topicBody"></div>
+  </div>
+</div>
+
+<!-- ADMIN MODAL -->
+<div class="overlay" id="adminOverlay">
+  <div class="modal modal-lg">
+    <div class="modal-head"><div class="modal-title">⚙ Админ-панель</div><button class="modal-close" onclick="closeAdmin()">✕</button></div>
+    <div class="modal-body" id="adminBody"></div>
+  </div>
+</div>
+
+<!-- SITE EDITOR MODAL -->
+<div class="overlay" id="siteEditorOverlay">
+  <div class="modal modal-lg">
+    <div class="modal-head"><div class="modal-title">🛠 Live-редактор сайта</div><button class="modal-close" onclick="closeSiteEditor()">✕</button></div>
+    <div class="modal-body" id="siteEditorBody"></div>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div class="confirm-icon" id="cfIcon">⚠️</div>
+    <div class="confirm-title" id="cfTitle"></div>
+    <div class="confirm-txt" id="cfTxt"></div>
+    <div class="confirm-btns">
+      <button class="btn btn-secondary btn-sm" onclick="closeConfirm()">Отмена</button>
+      <button class="btn btn-danger btn-sm" id="cfOk">Подтвердить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════════
+let curUser = null;
+let curPage = 'home';
+let profiles = [];
+let topics = [];
+let curProfile = null;       // {profile, comments}
+let curTopic = null;         // {topic, posts}
+let siteSettings = { siteName:'ANKETA.FORUM', welcome:'Анонимные анкеты и форум', accent:'#e8632a', adminAnon:false };
+
+const ROLE_LABELS = { owner:'ГЛАВ АДМИН', admin:'АДМИН', moderator:'МОДЕРАТОР', user:'USER' };
+const ROLE_RANK   = { user:0, moderator:1, admin:2, owner:3 };
+const rolerank = u => ROLE_RANK[u?.role] ?? 0;
+const isOwner = () => curUser?.role === 'owner';
+const isAdmin = () => rolerank(curUser) >= 2;
+const isMod   = () => rolerank(curUser) >= 1;
+
+// ════════════════════════════════════════════════════════════════════
+//  API CLIENT
+// ════════════════════════════════════════════════════════════════════
+async function api(path, opts = {}) {
+  const init = { method: opts.method || 'GET', credentials: 'include', headers: { 'Content-Type':'application/json' } };
+  if (opts.body) init.body = JSON.stringify(opts.body);
+  const res = await fetch('/api' + path, init);
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data.error || 'Ошибка ' + res.status);
+  return data;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════════════════════════════
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'только что';
+  if (s < 3600) return Math.floor(s/60) + ' мин назад';
+  if (s < 86400) return Math.floor(s/3600) + ' ч назад';
+  if (s < 30*86400) return Math.floor(s/86400) + ' дн назад';
+  return new Date(ts).toLocaleDateString('ru-RU');
+}
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = 'toast ' + type, 2400);
+}
+function roleChipHtml(role) {
+  const cls = role==='owner'?'role-owner':role==='admin'?'role-admin':role==='moderator'?'role-mod':'role-user';
+  return `<span class="role-chip ${cls}">${ROLE_LABELS[role]||role}</span>`;
+}
+function displayAuthor(u) {
+  if (siteSettings.adminAnon && u && rolerank(u) >= 2) return 'Анонимный админ';
+  return u?.displayName || u?.username || 'гость';
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  CONFIRM DIALOG
+// ════════════════════════════════════════════════════════════════════
+function confirm2(title, txt, icon, onOk) {
+  document.getElementById('cfIcon').textContent = icon || '⚠️';
+  document.getElementById('cfTitle').textContent = title;
+  document.getElementById('cfTxt').textContent = txt;
+  const btn = document.getElementById('cfOk');
+  btn.onclick = () => { closeConfirm(); onOk && onOk(); };
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+function closeConfirm() { document.getElementById('confirmOverlay').classList.remove('open'); }
+
+// ════════════════════════════════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════════════════════════════════
+function openAuth() { document.getElementById('authOverlay').classList.add('open'); }
+function closeAuth() { document.getElementById('authOverlay').classList.remove('open'); }
+function authTab(t) {
+  document.getElementById('atLogin').classList.toggle('active', t==='login');
+  document.getElementById('atReg').classList.toggle('active', t==='reg');
+  document.getElementById('apLogin').classList.toggle('active', t==='login');
+  document.getElementById('apReg').classList.toggle('active', t==='reg');
+}
+function requireAuth(fn) {
+  if (curUser) return fn();
+  openAuth();
+  toast('Сначала войди или зарегистрируйся', 'warn');
+}
+
+async function doLogin() {
+  const username = document.getElementById('liUser').value.trim();
+  const password = document.getElementById('liPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Заполни оба поля'; return; }
+  try {
+    const { user } = await api('/auth/login', { method:'POST', body:{ username, password } });
+    curUser = user;
+    closeAuth();
+    document.getElementById('liUser').value = '';
+    document.getElementById('liPass').value = '';
+    toast('С возвращением, ' + user.displayName, 'ok');
+    await loadAll();
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+async function doRegister() {
+  const username = document.getElementById('rUser').value.trim();
+  const displayName = document.getElementById('rDisp').value.trim() || username;
+  const password = document.getElementById('rPass').value;
+  const password2 = document.getElementById('rPass2').value;
+  const errEl = document.getElementById('regErr');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Заполни обязательные поля'; return; }
+  if (password !== password2) { errEl.textContent = 'Пароли не совпадают'; return; }
+  try {
+    const { user } = await api('/auth/register', { method:'POST', body:{ username, password, displayName } });
+    curUser = user;
+    closeAuth();
+    toast('Аккаунт создан', 'ok');
+    await loadAll();
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+async function doLogout() {
+  try { await api('/auth/logout', { method:'POST' }); } catch {}
+  curUser = null;
+  closeUDrop();
+  toast('Вы вышли', 'ok');
+  await loadAll();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  HEADER
+// ════════════════════════════════════════════════════════════════════
+function renderHeader() {
+  const r = document.getElementById('hdrRight');
+  document.getElementById('hdrLogo').textContent = (siteSettings.siteName || 'ANKETA.FORUM').split('.')[0] || 'ANKETA';
+  document.title = siteSettings.siteName || 'ANKETA.FORUM';
+  document.documentElement.style.setProperty('--accent', siteSettings.accent || '#e8632a');
+  document.getElementById('navHome').classList.toggle('active', curPage==='home' || curPage==='create');
+  document.getElementById('navForum').classList.toggle('active', curPage==='forum');
+
+  // bottom nav активные состояния
+  document.getElementById('bnavHome')?.classList.toggle('active', curPage==='home'||curPage==='create');
+  document.getElementById('bnavForum')?.classList.toggle('active', curPage==='forum');
+  const bnavP = document.getElementById('bnavProfile');
+  const bnavIco = document.getElementById('bnavProfileIco');
+  const bnavLbl = document.getElementById('bnavProfileLbl');
+  if (bnavP && bnavIco && bnavLbl) {
+    bnavIco.textContent = curUser ? (curUser.emoji || '👤') : '👤';
+    bnavLbl.textContent = curUser ? curUser.displayName.slice(0,8) : 'Войти';
+  }
+
+  if (!curUser) {
+    r.innerHTML = `<button class="hbtn hbtn-ghost" onclick="openAuth()">Войти</button>
+                   <button class="hbtn hbtn-accent" onclick="openAuth();authTab('reg')">Регистрация</button>`;
+    return;
+  }
+  const role = curUser.role;
+  const adminBtn = isAdmin()
+    ? `<button class="hbtn hbtn-ghost" onclick="openSiteEditor()" style="color:var(--accent)">🛠 Сайт</button>
+       <button class="hbtn hbtn-ghost" onclick="openAdmin()" style="color:var(--red)">⚙ Админ</button>` : '';
+  r.innerHTML = `
+    ${adminBtn}
+    <div class="user-btn" onclick="toggleUDrop(event)">
+      <div class="user-av-emoji">${esc(curUser.emoji || '👤')}</div>
+      <div class="user-name-chip">${esc(curUser.displayName)}</div>
+      ${roleChipHtml(role)}
+      <div class="udrop" id="userDrop">
+        <div class="udrop-head">
+          <div class="udrop-uname">@${esc(curUser.username)}</div>
+          <div class="udrop-sub">${ROLE_LABELS[role]||role}</div>
+        </div>
+        <button class="udrop-item" onclick="nav('create');closeUDrop()">➕ Создать анкету</button>
+        ${isAdmin() ? `<button class="udrop-item" onclick="openSiteEditor();closeUDrop()" style="color:var(--accent)">🛠 Редактор сайта</button>
+        <button class="udrop-item" onclick="openAdmin();closeUDrop()" style="color:var(--red)">⚙ Админ-панель</button>` : ''}
+        <button class="udrop-item" onclick="openSettings();closeUDrop()">⚙ Настройки</button>
+        <div class="udrop-sep"></div>
+        <button class="udrop-item red" onclick="doLogout()">🚪 Выйти</button>
+      </div>
+    </div>`;
+}
+
+function onMobProfile() {
+  if (curUser) { openSettings(); }
+  else { openAuth(); }
+}
+function toggleUDrop(e) { e?.stopPropagation(); document.getElementById('userDrop')?.classList.toggle('open'); }
+function closeUDrop() { document.getElementById('userDrop')?.classList.remove('open'); }
+document.addEventListener('click', () => closeUDrop());
+
+// ════════════════════════════════════════════════════════════════════
+//  NAVIGATION & RENDER
+// ════════════════════════════════════════════════════════════════════
+function nav(page) {
+  curPage = page;
+  document.getElementById('globalSearch').value = '';
+  render();
+  renderHeader();
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+function render() {
+  const m = document.getElementById('mainContent');
+  if (curPage === 'home') m.innerHTML = renderHome();
+  else if (curPage === 'forum') m.innerHTML = renderForum();
+  else if (curPage === 'create') m.innerHTML = renderCreateProfile();
+  else m.innerHTML = renderHome();
+  document.getElementById('welcomeBox').textContent = siteSettings.welcome || '';
+}
+
+// ── HOME (анкеты) ───────────────────────────────────────────────
+function renderHome() {
+  const q = document.getElementById('globalSearch').value.trim().toLowerCase();
+  let list = profiles.slice();
+  if (q) list = list.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    (p.bio||'').toLowerCase().includes(q) ||
+    (p.tags||[]).some(t => t.toLowerCase().includes(q))
+  );
+  list.sort((a,b) => (b.pinned-a.pinned) || (b.createdAt - a.createdAt));
+
+  const adminBar = isMod() ? `<div class="quick-admin-panel">
+    <b>⚡ Действия модератора</b>
+    <span class="hint">Наведи на анкету: появятся ✏️ 📌 ⧉ 🗑️</span>
+    ${isAdmin() ? `<button class="btn btn-secondary btn-sm" onclick="openSiteEditor()">🛠 Live-редактор</button>` : ''}
+    <button class="btn btn-primary btn-sm" onclick="nav('create')">+ Анкета</button>
+  </div>` : '';
+
+  const cards = list.length ? list.map(p => {
+    const adminControls = isMod() ? `<div class="pcard-admin-actions" onclick="event.stopPropagation()">
+        <button class="pcard-admin-btn" title="Редактировать" onclick="adminEditProfile(${p.id})">✏️</button>
+        <button class="pcard-admin-btn" title="${p.pinned?'Открепить':'Закрепить'}" onclick="quickTogglePin(${p.id})">📌</button>
+        <button class="pcard-admin-btn" title="${p.hidden?'Показать':'Скрыть'}" onclick="quickToggleHide(${p.id})">${p.hidden?'👁':'🙈'}</button>
+        <button class="pcard-admin-btn danger" title="Удалить" onclick="quickDeleteProfile(${p.id})">🗑️</button>
+      </div>` : '';
+    return `<div class="pcard${p.hidden?' is-hidden':''}" onclick="openProfile(${p.id})">
+      ${adminControls}
+      ${p.hidden?'<div class="admin-badge-mini">СКРЫТА</div>':''}
+      ${p.pinned&&!isMod()?'<div class="pcard-pin">📌</div>':''}
+      <div class="pcard-top">
+        <div class="pcard-av" style="background:${esc(p.color)}40">${esc(p.emoji||'👤')}</div>
+        <div class="pcard-info">
+          <div class="pcard-name">${esc(p.name)}</div>
+          <div class="pcard-meta">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
+          <div class="pcard-tags">${(p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+        </div>
+      </div>
+      <div class="pcard-bio">${esc(p.bio||'')}</div>
+    </div>`;
+  }).join('') : `<div class="empty-state">
+      <div class="icon">📋</div><h3>Анкет пока нет</h3>
+      <div>${curUser?'Будь первым — нажми «Создать анкету»':'Войди, чтобы создать первую анкету'}</div>
+    </div>`;
+
+  return `<h1 class="page-title">📋 Анкеты</h1>${adminBar}<div class="profiles-grid">${cards}</div>`;
+}
+
+// ── FORUM ────────────────────────────────────────────────────────
+function renderForum() {
+  const q = document.getElementById('globalSearch').value.trim().toLowerCase();
+  let list = topics.slice();
+  if (q) list = list.filter(t => t.title.toLowerCase().includes(q) || t.body.toLowerCase().includes(q));
+  list.sort((a,b) => (b.pinned-a.pinned) || (b.createdAt - a.createdAt));
+
+  const createBtn = curUser ? `<button class="btn btn-primary btn-sm" onclick="openCreateTopic()">+ Новая тема</button>` : '';
+
+  const rows = list.length ? list.map(t => {
+    const modActions = isMod() ? `<div class="thread-admin-actions" onclick="event.stopPropagation()">
+        <button class="pcard-admin-btn" title="${t.pinned?'Открепить':'Закрепить'}" onclick="quickTogglePinTopic(${t.id})">📌</button>
+        <button class="pcard-admin-btn" title="${t.hidden?'Показать':'Скрыть'}" onclick="quickToggleHideTopic(${t.id})">${t.hidden?'👁':'🙈'}</button>
+        <button class="pcard-admin-btn danger" title="Удалить" onclick="quickDeleteTopic(${t.id})">🗑️</button>
+      </div>` : '';
+    return `<div class="thread-row${t.hidden?' is-hidden':''}" onclick="openTopic(${t.id})">
+      <div class="thread-icon">${t.pinned?'📌':'💬'}</div>
+      <div class="thread-info">
+        <div class="thread-title">${esc(t.title)}${t.hidden?' <span style="color:var(--red);font-size:10px">[скрыто]</span>':''}</div>
+        <div class="thread-meta">@${esc(t.author)} · ${timeAgo(t.createdAt)}</div>
+      </div>
+      <div class="thread-stats"><div class="thread-replies">💬 ${t.postsCount||0}</div></div>
+      ${modActions}
+    </div>`;
+  }).join('') : `<div class="empty-state">
+      <div class="icon">💬</div><h3>Тем пока нет</h3>
+      <div>${curUser?'Создай первую тему':'Войди, чтобы участвовать в форуме'}</div>
+    </div>`;
+
+  return `<div class="section-head"><h1 class="page-title" style="margin:0">💬 Форум</h1>${createBtn}</div>
+          <div class="thread-list">${rows}</div>`;
+}
+
+// ── CREATE PROFILE FORM ─────────────────────────────────────────
+function renderCreateProfile() {
+  if (!curUser) { setTimeout(openAuth, 0); return '<div class="empty-state"><h3>Войди, чтобы создать анкету</h3></div>'; }
+  return `<h1 class="page-title">➕ Новая анкета</h1>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;max-width:600px">
+      <div class="auth-err" id="cpErr"></div>
+      <div class="form-row">
+        <div class="fgroup"><label class="flabel">Имя</label><input class="finput" id="cpName" maxlength="50" placeholder="Имя"></div>
+        <div class="fgroup" style="max-width:120px"><label class="flabel">Возраст</label><input class="finput" id="cpAge" type="number" min="0" max="120"></div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup" style="max-width:120px"><label class="flabel">Эмодзи</label><input class="finput" id="cpEmoji" maxlength="4" placeholder="👤"></div>
+        <div class="fgroup" style="max-width:140px"><label class="flabel">Цвет</label><input class="finput" id="cpColor" type="color" value="#e8632a" style="height:36px;padding:2px"></div>
+        <div class="fgroup"><label class="flabel">Теги (через запятую)</label><input class="finput" id="cpTags" placeholder="музыка, кино"></div>
+      </div>
+      <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="cpBio" maxlength="2000" placeholder="Опиши себя..."></textarea></div>
+      <button class="btn btn-primary btn-block" onclick="submitCreateProfile()">Опубликовать анкету</button>
+    </div>`;
+}
+
+async function submitCreateProfile() {
+  const name = document.getElementById('cpName').value.trim();
+  const age = +document.getElementById('cpAge').value || null;
+  const emoji = document.getElementById('cpEmoji').value.trim() || '👤';
+  const color = document.getElementById('cpColor').value || '#e8632a';
+  const bio = document.getElementById('cpBio').value.trim();
+  const tags = document.getElementById('cpTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const errEl = document.getElementById('cpErr');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Имя обязательно'; return; }
+  try {
+    await api('/profiles', { method:'POST', body:{ name, age, emoji, color, bio, tags } });
+    toast('Анкета опубликована', 'ok');
+    await loadProfiles();
+    nav('home');
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  PROFILE MODAL
+// ════════════════════════════════════════════════════════════════════
+async function openProfile(id) {
+  try {
+    const data = await api('/profiles/' + id);
+    curProfile = data;
+    renderProfileModal();
+    document.getElementById('profileOverlay').classList.add('open');
+    socketJoinProfile(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+function closeProfile() {
+  if (curProfile) socketLeaveProfile(curProfile.profile.id);
+  document.getElementById('profileOverlay').classList.remove('open');
+  curProfile = null;
+}
+
+function avatarHtml(src, emoji, size='72px', cls='') {
+  if (src) return `<img src="${esc(src)}" class="avatar-img ${cls}" style="width:${size};height:${size}" onerror="this.style.display='none'">`;
+  return `<div class="pm-av" style="width:${size};height:${size};font-size:calc(${size} * .45)">${esc(emoji||'👤')}</div>`;
+}
+
+function renderProfileModal() {
+  if (!curProfile) return;
+  const p = curProfile.profile;
+  const isOwn = curUser && p.ownerId === curUser.id;
+  const canEdit = isOwn || isMod();
+  const canDelete = isOwn || isMod();
+
+  const adminBar = canEdit ? `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn btn-secondary btn-sm" onclick="adminEditProfile(${p.id})">✏️ Редактировать</button>
+    ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="quickTogglePin(${p.id})">📌 ${p.pinned?'Открепить':'Закрепить'}</button>`:''}
+    ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="quickToggleHide(${p.id})">${p.hidden?'👁 Показать':'🙈 Скрыть'}</button>`:''}
+    ${canDelete?`<button class="btn btn-danger btn-sm" onclick="quickDeleteProfile(${p.id})">🗑️ Удалить</button>`:''}
+  </div>` : '';
+
+  // Аватарка анкеты с кнопкой загрузки для владельца
+  const avHtml = canEdit
+    ? `<div class="avatar-upload-wrap" onclick="uploadProfileAvatar(${p.id})" title="Сменить аватарку">
+        ${p.avatar
+          ? `<img src="${esc(p.avatar)}" class="avatar-img" style="width:72px;height:72px">`
+          : `<div class="pm-av" style="background:${esc(p.color)}40">${esc(p.emoji||'👤')}</div>`}
+        <div class="avatar-overlay">📷</div>
+       </div>`
+    : p.avatar
+      ? `<img src="${esc(p.avatar)}" class="avatar-img" style="width:72px;height:72px">`
+      : `<div class="pm-av" style="background:${esc(p.color)}40">${esc(p.emoji||'👤')}</div>`;
+
+  // Галерея фото
+  const photos = p.photos || [];
+  const photoGrid = (photos.length || canEdit) ? `
+    <div class="section-title">🖼 Фотографии (${photos.length}/10)</div>
+    <div class="photo-grid">
+      ${photos.map(url=>`
+        <div class="photo-item" onclick="openLightbox('${esc(url)}')">
+          <img src="${esc(url)}" loading="lazy">
+          ${canEdit?`<button class="photo-del" onclick="event.stopPropagation();deleteProfilePhoto(${p.id},'${esc(url)}')">✕</button>`:''}
+        </div>`).join('')}
+      ${canEdit && photos.length<10 ? `
+        <button class="photo-add-btn" onclick="uploadProfilePhoto(${p.id})">
+          <span class="ico">➕</span><span>Фото</span>
+        </button>` : ''}
+    </div>` : '';
+
+  // Комментарии
+  const comments = (curProfile.comments || []).map(c => {
+    const canDel = curUser && (c.user_id === curUser.id || isMod());
+    const cmAvatar = c.user_avatar
+      ? `<img src="${esc(c.user_avatar)}" class="avatar-img-sm" style="width:28px;height:28px">`
+      : `<div class="cm-av">${c.user_emoji||'👤'}</div>`;
+    return `<div class="comment-item">
+      ${cmAvatar}
+      <div class="cm-bubble">
+        <div class="cm-head"><div class="cm-name"><span class="author-link" onclick="event.stopPropagation();openUserProfile(${c.user_id})">${esc(c.author)}</span></div><div class="cm-time">${timeAgo(c.created_at)}</div></div>
+        ${c.text?`<div class="cm-text">${esc(c.text)}</div>`:''}
+        ${c.image?`<img src="${esc(c.image)}" class="cm-image" onclick="openLightbox('${esc(c.image)}')" loading="lazy">`:''}
+        ${canDel?`<div class="cm-actions"><button class="cm-act red" onclick="deleteComment(${c.id})">Удалить</button></div>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--muted);font-size:12px;padding:8px 0">Комментариев пока нет</div>';
+
+  const commentInput = curUser ? `
+    <div id="cmAttachPreview"></div>
+    <div class="comment-input-row">
+      ${curUser.avatar
+        ? `<img src="${esc(curUser.avatar)}" class="avatar-img-sm" style="width:28px;height:28px;flex-shrink:0">`
+        : `<div class="cm-av">${esc(curUser.emoji||'👤')}</div>`}
+      <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+        <div class="comment-field-wrap">
+          <textarea class="comment-field" id="cmField" placeholder="Написать комментарий..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendComment()}"></textarea>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="img-btn" onclick="pickCommentImage()" title="Прикрепить фото">📎 Фото</button>
+          <input type="file" id="cmImageInput" accept="image/*" style="display:none" onchange="previewCommentImage(this)">
+        </div>
+      </div>
+      <button class="comment-send" onclick="sendComment()">→</button>
+    </div>` : `<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px"><a onclick="openAuth()" style="cursor:pointer">Войди</a> чтобы оставить комментарий</div>`;
+
+  document.getElementById('profileBody').innerHTML = `
+    ${adminBar}
+    <div class="profile-header-modal">
+      ${avHtml}
+      <div class="pm-info">
+        <div class="pm-name">${esc(p.name)}</div>
+        <div class="pm-sub">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
+        <div class="pm-tags">${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+      </div>
+    </div>
+    <div class="section-title">📝 О себе</div>
+    <div class="about-box">${esc(p.bio||'Нет описания')}</div>
+    ${photoGrid}
+    <div class="section-title">💬 Комментарии (${(curProfile.comments||[]).length})</div>
+    ${comments}
+    ${commentInput}`;
+}
+
+// Загрузка аватарки анкеты
+function uploadProfileAvatar(profileId) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    if (!inp.files[0]) return;
+    const fd = new FormData();
+    fd.append('avatar', inp.files[0]);
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/avatar`, { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const idx = profiles.findIndex(x=>x.id===profileId);
+      if (idx>=0) profiles[idx] = data.profile;
+      if (curProfile?.profile.id===profileId) { curProfile.profile=data.profile; renderProfileModal(); }
+      toast('Аватарка обновлена', 'ok');
+    } catch(e) { toast(e.message, 'err'); }
+  };
+  inp.click();
+}
+
+// Загрузка фото в галерею анкеты
+function uploadProfilePhoto(profileId) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    if (!inp.files[0]) return;
+    const fd = new FormData();
+    fd.append('photo', inp.files[0]);
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/photos`, { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const idx = profiles.findIndex(x=>x.id===profileId);
+      if (idx>=0) profiles[idx] = data.profile;
+      if (curProfile?.profile.id===profileId) { curProfile.profile=data.profile; renderProfileModal(); }
+      toast('Фото добавлено', 'ok');
+    } catch(e) { toast(e.message, 'err'); }
+  };
+  inp.click();
+}
+
+async function deleteProfilePhoto(profileId, url) {
+  try {
+    const res = await fetch(`/api/profiles/${profileId}/photos`, { method:'DELETE', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url}) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    const idx = profiles.findIndex(x=>x.id===profileId);
+    if (idx>=0) profiles[idx] = data.profile;
+    if (curProfile?.profile.id===profileId) { curProfile.profile=data.profile; renderProfileModal(); }
+    toast('Фото удалено', 'ok');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// Прикрепление фото к комментарию
+let _cmImageFile = null;
+function pickCommentImage() { document.getElementById('cmImageInput')?.click(); }
+function previewCommentImage(input) {
+  _cmImageFile = input.files[0] || null;
+  const prev = document.getElementById('cmAttachPreview');
+  if (!prev) return;
+  if (_cmImageFile) {
+    const url = URL.createObjectURL(_cmImageFile);
+    prev.innerHTML = `<div class="img-attach-preview"><img src="${url}"><button class="rm" onclick="clearCommentImage()">✕</button></div>`;
+  } else { prev.innerHTML=''; }
+}
+function clearCommentImage() {
+  _cmImageFile = null;
+  const inp = document.getElementById('cmImageInput');
+  if (inp) inp.value='';
+  const prev = document.getElementById('cmAttachPreview');
+  if (prev) prev.innerHTML='';
+}
+
+async function sendComment() {
+  if (!curProfile || !curUser) return;
+  const text = (document.getElementById('cmField')?.value||'').trim();
+  if (!text && !_cmImageFile) return;
+  try {
+    if (_cmImageFile) {
+      const fd = new FormData();
+      fd.append('image', _cmImageFile);
+      if (text) fd.append('text', text);
+      const res = await fetch(`/api/profiles/${curProfile.profile.id}/comments/image`, { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+    } else {
+      await api(`/profiles/${curProfile.profile.id}/comments`, { method:'POST', body:{ text } });
+    }
+    if (document.getElementById('cmField')) document.getElementById('cmField').value = '';
+    clearCommentImage();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function deleteComment(id) {
+  try {
+    await api('/comments/' + id, { method:'DELETE' });
+    curProfile.comments = curProfile.comments.filter(x=>x.id!==id);
+    renderProfileModal();
+    toast('Удалено', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function adminEditProfile(id) {
+  const p = profiles.find(x => x.id === id) || curProfile?.profile;
+  if (!p) return;
+  document.getElementById('profileOverlay').classList.add('open');
+  document.getElementById('profileBody').innerHTML = `
+    <h3 style="margin-bottom:14px">Редактирование: ${esc(p.name)}</h3>
+    <div style="margin-bottom:14px">
+      <label class="flabel">Аватарка анкеты</label>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+        ${p.avatar?`<img src="${esc(p.avatar)}" class="avatar-img" style="width:56px;height:56px">`:`<div class="pm-av" style="width:56px;height:56px;font-size:24px">${esc(p.emoji||'👤')}</div>`}
+        <button class="btn btn-secondary btn-sm" onclick="uploadProfileAvatar(${p.id})">📷 Загрузить</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="fgroup"><label class="flabel">Имя</label><input class="finput" id="epName" value="${esc(p.name)}"></div>
+      <div class="fgroup" style="max-width:120px"><label class="flabel">Возраст</label><input class="finput" id="epAge" type="number" value="${p.age||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="fgroup" style="max-width:120px"><label class="flabel">Эмодзи</label><input class="finput" id="epEmoji" value="${esc(p.emoji||'👤')}"></div>
+      <div class="fgroup" style="max-width:140px"><label class="flabel">Цвет</label><input class="finput" id="epColor" type="color" value="${esc(p.color||'#e8632a')}" style="height:36px"></div>
+      <div class="fgroup"><label class="flabel">Теги</label><input class="finput" id="epTags" value="${esc((p.tags||[]).join(', '))}"></div>
+    </div>
+    <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="epBio">${esc(p.bio||'')}</textarea></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="submitEditProfile(${p.id})">Сохранить</button>
+      <button class="btn btn-secondary" onclick="openProfile(${p.id})">Отмена</button>
+    </div>`;
+}
+
+async function submitEditProfile(id) {
+  try {
+    await api('/profiles/' + id, { method:'PATCH', body:{
+      name: document.getElementById('epName').value.trim(),
+      age: +document.getElementById('epAge').value || null,
+      emoji: document.getElementById('epEmoji').value.trim() || '👤',
+      color: document.getElementById('epColor').value,
+      tags: document.getElementById('epTags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      bio: document.getElementById('epBio').value.trim()
+    } });
+    toast('Сохранено', 'ok');
+    await loadProfiles();
+    openProfile(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function quickTogglePin(id) {
+  const p = profiles.find(x => x.id === id) || curProfile?.profile;
+  if (!p) return;
+  try {
+    await api('/profiles/' + id, { method:'PATCH', body:{ pinned: !p.pinned } });
+    await loadProfiles(); render();
+    if (curProfile?.profile.id === id) openProfile(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function quickToggleHide(id) {
+  const p = profiles.find(x => x.id === id) || curProfile?.profile;
+  if (!p) return;
+  try {
+    await api('/profiles/' + id, { method:'PATCH', body:{ hidden: !p.hidden } });
+    await loadProfiles(); render();
+    if (curProfile?.profile.id === id) openProfile(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+function quickDeleteProfile(id) {
+  const p = profiles.find(x => x.id === id) || curProfile?.profile;
+  confirm2('Удалить анкету?', `«${p?.name||''}» удалится навсегда.`, '🗑️', async () => {
+    try {
+      await api('/profiles/' + id, { method:'DELETE' });
+      toast('Анкета удалена', 'ok');
+      closeProfile();
+      await loadProfiles(); render();
+    } catch (e) { toast(e.message, 'err'); }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  TOPIC MODAL
+// ════════════════════════════════════════════════════════════════════
+function openCreateTopic() {
+  if (!curUser) return openAuth();
+  const ov = document.getElementById('topicOverlay');
+  document.getElementById('topicBody').innerHTML = `
+    <h3 style="margin-bottom:14px">Новая тема</h3>
+    <div class="auth-err" id="ctErr"></div>
+    <div class="fgroup"><label class="flabel">Заголовок</label><input class="finput" id="ctTitle" maxlength="120"></div>
+    <div class="fgroup"><label class="flabel">Текст</label><textarea class="ftextarea" id="ctBody" maxlength="5000" style="min-height:140px"></textarea></div>
+    <button class="btn btn-primary btn-block" onclick="submitCreateTopic()">Опубликовать</button>`;
+  ov.classList.add('open');
+}
+async function submitCreateTopic() {
+  const title = document.getElementById('ctTitle').value.trim();
+  const body = document.getElementById('ctBody').value.trim();
+  const err = document.getElementById('ctErr');
+  err.textContent = '';
+  if (!title || !body) { err.textContent = 'Заполни оба поля'; return; }
+  try {
+    const { topic } = await api('/topics', { method:'POST', body:{ title, body } });
+    toast('Тема создана', 'ok');
+    await loadTopics();
+    openTopic(topic.id);
+  } catch (e) { err.textContent = e.message; }
+}
+
+async function openTopic(id) {
+  try {
+    const data = await api('/topics/' + id);
+    curTopic = data;
+    renderTopicModal();
+    document.getElementById('topicOverlay').classList.add('open');
+    socketJoinTopic(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+function closeTopic() {
+  if (curTopic) socketLeaveTopic(curTopic.topic.id);
+  document.getElementById('topicOverlay').classList.remove('open');
+  curTopic = null;
+}
+
+function renderTopicModal() {
+  if (!curTopic) return;
+  const t = curTopic.topic;
+  const isOwn = curUser && t.userId === curUser.id;
+  const canDelete = isOwn || isMod();
+  const adminBar = (isOwn || isMod()) ? `<div class="tp-actions">
+    ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="quickTogglePinTopic(${t.id})">📌 ${t.pinned?'Открепить':'Закрепить'}</button>`:''}
+    ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="quickToggleHideTopic(${t.id})">${t.hidden?'👁 Показать':'🙈 Скрыть'}</button>`:''}
+    ${canDelete?`<button class="btn btn-danger btn-sm" onclick="quickDeleteTopic(${t.id})">🗑️ Удалить тему</button>`:''}
+  </div>` : '';
+
+  const posts = (curTopic.posts || []).map(p => {
+    const canDel = curUser && (p.user_id === curUser.id || isMod());
+    return `<div class="thread-post">
+      <div class="tp-head">
+        <div class="tp-sidebar">
+          ${p.user_avatar?`<img src="${esc(p.user_avatar)}" class="avatar-img" style="width:52px;height:52px;margin:0 auto 6px">`:`<div class="tp-av">👤</div>`}
+          <div class="tp-username"><span class="author-link" onclick="openUserProfile(${p.user_id})">${esc(p.author)}</span></div>
+        </div>
+        <div class="tp-body">
+          <div class="tp-meta">${timeAgo(p.created_at)}</div>
+          ${p.text?`<div class="tp-content">${esc(p.text)}</div>`:''}
+          ${p.image?`<img src="${esc(p.image)}" class="post-image" onclick="openLightbox('${esc(p.image)}')" loading="lazy">`:''}
+        </div>
+      </div>
+      ${canDel?`<div class="tp-actions"><button class="btn btn-secondary btn-sm" onclick="deletePost(${p.id})">🗑️ Удалить</button></div>`:''}
+    </div>`;
+  }).join('');
+
+  const replyForm = curUser ? `
+    <div style="margin-top:14px">
+      <textarea class="ftextarea" id="postField" placeholder="Написать ответ..." style="min-height:80px"></textarea>
+      <div id="postAttachPreview"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="sendPost()">Ответить</button>
+        <button class="img-btn" onclick="pickPostImage()" title="Прикрепить фото">📎 Фото</button>
+        <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="previewPostImage(this)">
+      </div>
+    </div>` : `<div style="text-align:center;color:var(--muted);padding:14px"><a onclick="openAuth()" style="cursor:pointer">Войди</a> чтобы ответить</div>`;
+
+  document.getElementById('topicBody').innerHTML = `
+    <div class="thread-post">
+      <div class="tp-head">
+        <div class="tp-sidebar">
+          <div class="tp-av">👤</div>
+          <div class="tp-username"><span class="author-link" onclick="openUserProfile(${t.userId})">${esc(t.author)}</span></div>
+        </div>
+        <div class="tp-body">
+          <h3 style="font-size:18px;color:var(--white);margin-bottom:6px">${t.pinned?'📌 ':''}${esc(t.title)}</h3>
+          <div class="tp-meta">${timeAgo(t.createdAt)}</div>
+          <div class="tp-content">${esc(t.body)}</div>
+        </div>
+      </div>
+      ${adminBar}
+    </div>
+    <div class="section-title">💬 Ответы (${(curTopic.posts||[]).length})</div>
+    ${posts || '<div style="color:var(--muted);font-size:12px;padding:8px 0">Ответов пока нет</div>'}
+    ${replyForm}`;
+}
+
+let _postImageFile = null;
+function pickPostImage() { document.getElementById('postImageInput')?.click(); }
+function previewPostImage(input) {
+  _postImageFile = input.files[0] || null;
+  const prev = document.getElementById('postAttachPreview');
+  if (!prev) return;
+  if (_postImageFile) {
+    const url = URL.createObjectURL(_postImageFile);
+    prev.innerHTML = `<div class="img-attach-preview"><img src="${url}"><button class="rm" onclick="clearPostImage()">✕</button></div>`;
+  } else { prev.innerHTML=''; }
+}
+function clearPostImage() {
+  _postImageFile = null;
+  const inp = document.getElementById('postImageInput');
+  if (inp) inp.value='';
+  const prev = document.getElementById('postAttachPreview');
+  if (prev) prev.innerHTML='';
+}
+
+async function sendPost() {
+  if (!curTopic || !curUser) return;
+  const text = (document.getElementById('postField')?.value||'').trim();
+  if (!text && !_postImageFile) return;
+  try {
+    if (_postImageFile) {
+      const fd = new FormData();
+      fd.append('image', _postImageFile);
+      if (text) fd.append('text', text);
+      const res = await fetch(`/api/topics/${curTopic.topic.id}/posts/image`, { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+    } else {
+      await api(`/topics/${curTopic.topic.id}/posts`, { method:'POST', body:{ text } });
+    }
+    if (document.getElementById('postField')) document.getElementById('postField').value = '';
+    clearPostImage();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function deletePost(id) {
+  try {
+    await api('/posts/' + id, { method:'DELETE' });
+    curTopic.posts = curTopic.posts.filter(x=>x.id!==id);
+    renderTopicModal();
+    await loadTopics();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function quickTogglePinTopic(id) {
+  const t = topics.find(x => x.id === id) || curTopic?.topic;
+  try {
+    await api('/topics/' + id, { method:'PATCH', body:{ pinned: !t.pinned } });
+    await loadTopics(); render();
+    if (curTopic?.topic.id === id) openTopic(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function quickToggleHideTopic(id) {
+  const t = topics.find(x => x.id === id) || curTopic?.topic;
+  try {
+    await api('/topics/' + id, { method:'PATCH', body:{ hidden: !t.hidden } });
+    await loadTopics(); render();
+    if (curTopic?.topic.id === id) openTopic(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+function quickDeleteTopic(id) {
+  const t = topics.find(x => x.id === id) || curTopic?.topic;
+  confirm2('Удалить тему?', `«${t?.title||''}» удалится со всеми ответами.`, '🗑️', async () => {
+    try {
+      await api('/topics/' + id, { method:'DELETE' });
+      toast('Тема удалена', 'ok');
+      closeTopic();
+      await loadTopics(); render();
+    } catch (e) { toast(e.message, 'err'); }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  LIGHTBOX
+// ════════════════════════════════════════════════════════════════════
+function openLightbox(src) {
+  const lb = document.createElement('div');
+  lb.className = 'photo-lightbox';
+  lb.innerHTML = `<img src="${esc(src)}">`;
+  lb.onclick = () => lb.remove();
+  document.body.appendChild(lb);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  USER PROFILE PAGE
+// ════════════════════════════════════════════════════════════════════
+let curUserProfile = null;
+
+async function openUserProfile(userId) {
+  if (!userId) return;
+  try {
+    const data = await api(`/users/${userId}/public`);
+    curUserProfile = data;
+    renderUserProfile();
+    document.getElementById('userProfileOverlay').classList.add('open');
+    document.getElementById('userProfileTitle').textContent = '@' + data.user.username;
+  } catch(e) { toast(e.message, 'err'); }
+}
+function closeUserProfile() {
+  document.getElementById('userProfileOverlay').classList.remove('open');
+  curUserProfile = null;
+}
+
+const SOCIAL_ICONS = { vk:'VK', tg:'TG', inst:'IG', discord:'DC', youtube:'YT', twitter:'TW', site:'🌐' };
+
+function renderUserProfile() {
+  if (!curUserProfile) return;
+  const { user: u, profiles: uprofs, postsCount, commentsCount } = curUserProfile;
+  const isMe = curUser && curUser.id === u.id;
+  const accentColor = u.accent || 'var(--accent)';
+
+  // Баннер
+  const bannerHtml = isMe
+    ? `<div class="uprofile-banner" onclick="uploadUserBanner()" title="Сменить баннер">
+        ${u.banner ? `<img src="${esc(u.banner)}">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,${accentColor}44,${accentColor}22)"></div>`}
+        <div class="uprofile-banner-overlay">📷 Сменить баннер</div>
+       </div>`
+    : `<div class="uprofile-banner" style="cursor:default">
+        ${u.banner ? `<img src="${esc(u.banner)}">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,${accentColor}44,${accentColor}22)"></div>`}
+       </div>`;
+
+  // Аватарка
+  const avInner = u.avatar
+    ? `<img src="${esc(u.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    : `<span style="font-size:28px">${esc(u.emoji||'👤')}</span>`;
+  const avHtml = isMe
+    ? `<div class="uprofile-av-wrap">
+        <div class="uprofile-av" style="border-color:var(--card)" onclick="uploadUserAvatar()">${avInner}</div>
+        <div class="uprofile-av-edit" onclick="uploadUserAvatar()">📷</div>
+       </div>`
+    : `<div class="uprofile-av-wrap"><div class="uprofile-av">${avInner}</div></div>`;
+
+  // Соцсети
+  const socials = u.socials || {};
+  const socialLinks = Object.entries(socials).filter(([,v])=>v).map(([k,v]) => {
+    const label = SOCIAL_ICONS[k] || k;
+    const href = k==='vk'?`https://vk.com/${v}`:k==='tg'?`https://t.me/${v}`:k==='inst'?`https://instagram.com/${v}`:v;
+    return `<a class="social-link" href="${esc(href)}" target="_blank" rel="noopener">${label} ${esc(v)}</a>`;
+  }).join('');
+
+  // Анкеты пользователя
+  const profsHtml = uprofs.length ? `
+    <div class="section-title" style="padding:0 20px">📋 Анкеты (${uprofs.length})</div>
+    <div style="padding:0 20px 20px">
+      <div class="profiles-grid">
+        ${uprofs.map(p=>`
+          <div class="pcard" onclick="closeUserProfile();openProfile(${p.id})">
+            <div class="pcard-top">
+              <div class="pcard-av" style="background:${esc(p.color)}40">${p.avatar?`<img src="${esc(p.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`:esc(p.emoji||'👤')}</div>
+              <div class="pcard-info">
+                <div class="pcard-name">${esc(p.name)}</div>
+                <div class="pcard-meta">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
+              </div>
+            </div>
+            <div class="pcard-bio">${esc(p.bio||'')}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const editBtn = isMe
+    ? `<button class="btn btn-secondary btn-sm" onclick="closeUserProfile();openSettings()">✏️ Редактировать профиль</button>`
+    : '';
+
+  document.getElementById('userProfileBody').innerHTML = `
+    ${bannerHtml}
+    <div class="uprofile-head">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        ${avHtml}
+        <div style="padding-top:10px">${editBtn}</div>
+      </div>
+      <div class="uprofile-name" style="color:${accentColor}">${esc(u.displayName)}</div>
+      <div class="uprofile-handle">@${esc(u.username)} · ${roleChipHtml(u.role)}</div>
+      ${u.status?`<div class="uprofile-status">${esc(u.status)}</div>`:''}
+      <div class="uprofile-meta">
+        ${u.location?`<div class="uprofile-meta-item">📍 ${esc(u.location)}</div>`:''}
+        <div class="uprofile-meta-item">📅 на сайте с ${new Date(u.createdAt).toLocaleDateString('ru-RU')}</div>
+        <div class="uprofile-meta-item">🕐 был ${timeAgo(u.lastSeen)}</div>
+      </div>
+      ${u.bio?`<div class="uprofile-bio">${esc(u.bio)}</div>`:''}
+      ${socialLinks?`<div class="uprofile-socials">${socialLinks}</div>`:''}
+    </div>
+    <div style="padding:0 20px 14px">
+      <div class="uprofile-stats">
+        <div class="uprofile-stat"><div class="uprofile-stat-n">${uprofs.length}</div><div class="uprofile-stat-l">Анкет</div></div>
+        <div class="uprofile-stat"><div class="uprofile-stat-n">${postsCount}</div><div class="uprofile-stat-l">Постов</div></div>
+        <div class="uprofile-stat"><div class="uprofile-stat-n">${commentsCount}</div><div class="uprofile-stat-l">Комментов</div></div>
+      </div>
+    </div>
+    ${profsHtml}`;
+}
+
+function uploadUserBanner() {
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='image/*';
+  inp.onchange = async () => {
+    if (!inp.files[0]) return;
+    const fd = new FormData();
+    fd.append('banner', inp.files[0]);
+    try {
+      const res = await fetch('/api/auth/banner', { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      curUser = data.user;
+      if (curUserProfile?.user.id === curUser.id) {
+        curUserProfile.user = curUser;
+        renderUserProfile();
+      }
+      toast('Баннер обновлён', 'ok');
+    } catch(e) { toast(e.message, 'err'); }
+  };
+  inp.click();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  USER SETTINGS
+// ════════════════════════════════════════════════════════════════════
+function openSettings() {
+  if (!curUser) return;
+  const u = curUser;
+  const s = u.socials || {};
+  const avHtml = u.avatar
+    ? `<img src="${esc(u.avatar)}" class="avatar-img" style="width:64px;height:64px">`
+    : `<div style="width:64px;height:64px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:28px">${esc(u.emoji||'👤')}</div>`;
+  const bannerPreview = u.banner
+    ? `<img src="${esc(u.banner)}" style="width:100%;height:60px;object-fit:cover;border-radius:var(--r);margin-bottom:6px">`
+    : `<div style="width:100%;height:60px;background:var(--bg3);border-radius:var(--r);margin-bottom:6px"></div>`;
+  document.getElementById('settingsBody').innerHTML = `
+    <div class="auth-err" id="stErr"></div>
+    <div id="stOk" style="color:var(--green);font-size:12px;min-height:16px;margin-bottom:8px"></div>
+    <div class="fgroup"><label class="flabel">Баннер профиля</label>
+      ${bannerPreview}
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" onclick="uploadUserBanner()">📷 Загрузить баннер</button>
+        ${u.banner?`<button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="removeUserBanner()">🗑 Удалить</button>`:''}
+      </div>
+    </div>
+    <div class="fgroup"><label class="flabel">Аватарка</label>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+        <div class="avatar-upload-wrap" onclick="uploadUserAvatar()">${avHtml}<div class="avatar-overlay">📷</div></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="uploadUserAvatar()">📷 Загрузить</button>
+          ${u.avatar?`<button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="removeUserAvatar()">🗑 Удалить</button>`:''}
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="fgroup"><label class="flabel">Отображаемое имя</label><input class="finput" id="stName" value="${esc(u.displayName)}" maxlength="30"></div>
+      <div class="fgroup" style="max-width:90px"><label class="flabel">Эмодзи</label><input class="finput" id="stEmoji" value="${esc(u.emoji||'👤')}" maxlength="4"></div>
+    </div>
+    <div class="form-row">
+      <div class="fgroup"><label class="flabel">Статус</label><input class="finput" id="stStatus" value="${esc(u.status||'')} " maxlength="60" placeholder="Чем занимаюсь..."></div>
+      <div class="fgroup"><label class="flabel">Местоположение</label><input class="finput" id="stLocation" value="${esc(u.location||'')} " maxlength="60" placeholder="Город, страна"></div>
+    </div>
+    <div class="fgroup"><label class="flabel">Цвет акцента профиля</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="color" id="stAccent" value="${esc(u.accent||'#e8632a')}" style="width:40px;height:32px;border:none;background:none;cursor:pointer">
+        <span style="font-size:12px;color:var(--muted)">Цвет имени и баннера в профиле</span>
+      </div>
+    </div>
+    <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="stBio" maxlength="500" placeholder="Расскажи о себе...">${esc(u.bio||'')} </textarea></div>
+    <div class="fgroup"><label class="flabel">Соцсети</label>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:80px;font-size:12px;color:var(--muted)">VK</span><input class="finput" id="socVk" value="${esc(s.vk||'')} " placeholder="username"></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:80px;font-size:12px;color:var(--muted)">Telegram</span><input class="finput" id="socTg" value="${esc(s.tg||'')} " placeholder="username"></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:80px;font-size:12px;color:var(--muted)">Instagram</span><input class="finput" id="socInst" value="${esc(s.inst||'')} " placeholder="username"></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:80px;font-size:12px;color:var(--muted)">Discord</span><input class="finput" id="socDiscord" value="${esc(s.discord||'')} " placeholder="user#0000"></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:80px;font-size:12px;color:var(--muted)">Сайт</span><input class="finput" id="socSite" value="${esc(s.site||'')} " placeholder="https://..."></div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveProfile()">💾 Сохранить</button>
+    <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
+    <h4 style="margin-bottom:10px;font-size:13px;color:var(--text2)">Сменить пароль</h4>
+    <div class="fgroup"><label class="flabel">Старый пароль</label><input class="finput" id="stOld" type="password"></div>
+    <div class="fgroup"><label class="flabel">Новый пароль (мин. 6)</label><input class="finput" id="stNew" type="password"></div>
+    <button class="btn btn-secondary" onclick="changePassword()">Сменить пароль</button>
+    <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
+    <button class="btn btn-secondary" style="color:var(--accent)" onclick="closeSettings();openUserProfile(${u.id})">👤 Смотреть свой профиль</button>`;
+  document.getElementById('settingsOverlay').classList.add('open');
+}
+function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+
+function uploadUserAvatar() {
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='image/*';
+  inp.onchange = async () => {
+    if (!inp.files[0]) return;
+    const fd = new FormData();
+    fd.append('avatar', inp.files[0]);
+    try {
+      const res = await fetch('/api/auth/avatar', { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      curUser = data.user;
+      renderHeader();
+      openSettings();
+      toast('Аватарка обновлена', 'ok');
+    } catch(e) { toast(e.message, 'err'); }
+  };
+  inp.click();
+}
+
+async function removeUserAvatar() {
+  try {
+    await api('/auth/avatar', { method:'DELETE' });
+    curUser.avatar = null;
+    renderHeader();
+    openSettings();
+    toast('Аватарка удалена', 'ok');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function saveProfile() {
+  try {
+    const { user } = await api('/auth/me', { method:'PATCH', body:{
+      displayName: document.getElementById('stName').value.trim(),
+      emoji: document.getElementById('stEmoji').value.trim(),
+      bio: document.getElementById('stBio').value.trim(),
+      accent: document.getElementById('stAccent').value,
+      status: document.getElementById('stStatus').value.trim(),
+      location: document.getElementById('stLocation').value.trim(),
+      socials: {
+        vk: document.getElementById('socVk').value.trim(),
+        tg: document.getElementById('socTg').value.trim(),
+        inst: document.getElementById('socInst').value.trim(),
+        discord: document.getElementById('socDiscord').value.trim(),
+        site: document.getElementById('socSite').value.trim(),
+      }
+    } });
+    curUser = user;
+    document.getElementById('stOk').textContent = '✓ Сохранено';
+    renderHeader();
+    if (curUserProfile?.user.id === user.id) { curUserProfile.user = user; renderUserProfile(); }
+  } catch (e) { document.getElementById('stErr').textContent = e.message; }
+}
+
+async function changePassword() {
+  try {
+    await api('/auth/change-password', { method:'POST', body:{
+      oldPassword: document.getElementById('stOld').value,
+      newPassword: document.getElementById('stNew').value
+    } });
+    document.getElementById('stOk').textContent = '✓ Пароль изменён';
+    document.getElementById('stOld').value = '';
+    document.getElementById('stNew').value = '';
+  } catch (e) { document.getElementById('stErr').textContent = e.message; }
+}
+
+async function removeUserBanner() {
+  try {
+    await api('/auth/banner', { method:'DELETE' });
+    curUser.banner = null;
+    renderHeader();
+    openSettings();
+    toast('Баннер удалён', 'ok');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  ADMIN PANEL
+// ════════════════════════════════════════════════════════════════════
+let adminTab = 'users';
+async function openAdmin() {
+  if (!isMod()) return;
+  document.getElementById('adminOverlay').classList.add('open');
+  await renderAdmin();
+}
+function closeAdmin() { document.getElementById('adminOverlay').classList.remove('open'); }
+
+async function renderAdmin() {
+  const stats = await api('/stats');
+  const tabs = [
+    ['users', '👥 Пользователи'],
+    ['profiles', '📋 Анкеты'],
+    ['topics', '💬 Темы'],
+  ];
+  if (isAdmin()) tabs.push(['audit', '📜 Лог']);
+  if (isAdmin()) tabs.push(['danger', '⚠ Опасные']);
+
+  let body = `
+    <div class="admin-stat-grid">
+      <div class="astat"><div class="astat-n">${stats.users}</div><div class="astat-l">Юзеров</div></div>
+      <div class="astat"><div class="astat-n">${stats.profiles}</div><div class="astat-l">Анкет</div></div>
+      <div class="astat"><div class="astat-n">${stats.topics}</div><div class="astat-l">Тем</div></div>
+      <div class="astat"><div class="astat-n">${stats.posts}</div><div class="astat-l">Сообщений</div></div>
+    </div>
+    <div class="atabs">${tabs.map(([k,l])=>`<button class="atab2${adminTab===k?' active':''}" onclick="adminTab='${k}';renderAdmin()">${l}</button>`).join('')}</div>
+    <div id="adminTabBody">Загрузка...</div>`;
+  document.getElementById('adminBody').innerHTML = body;
+  if (adminTab === 'users') renderAdminUsers();
+  else if (adminTab === 'profiles') renderAdminProfiles();
+  else if (adminTab === 'topics') renderAdminTopics();
+  else if (adminTab === 'audit') renderAdminAudit();
+  else if (adminTab === 'danger') renderAdminDanger();
+}
+
+async function renderAdminUsers() {
+  try {
+    const { users } = await api('/users');
+    const rows = users.map(u => {
+      const canEditRole = isOwner() && u.role !== 'owner' && u.id !== curUser.id;
+      const canModerate = u.role !== 'owner' && u.id !== curUser.id && rolerank(u) < rolerank(curUser);
+      const roleSel = canEditRole ? `<select class="role-sel" onchange="setUserRole(${u.id}, this.value)">
+        ${['user','moderator','admin'].map(r=>`<option value="${r}"${u.role===r?' selected':''}>${ROLE_LABELS[r]}</option>`).join('')}
+      </select>` : roleChipHtml(u.role);
+      const banBtn = canModerate ? `<button class="act-btn ${u.banned?'g':'y'}" onclick="banUser(${u.id}, ${!u.banned})">${u.banned?'Разбанить':'Бан'}</button>` : '';
+      const delBtn = isOwner() && u.role !== 'owner' && u.id !== curUser.id ? `<button class="act-btn d" onclick="deleteUser(${u.id}, '${esc(u.username)}')">Удалить</button>` : '';
+      return `<tr>
+        <td>${esc(u.emoji||'👤')} <b>${esc(u.displayName)}</b><br><span style="color:var(--muted);font-size:11px">@${esc(u.username)}</span></td>
+        <td>${roleSel}</td>
+        <td>${u.banned?'<span style="color:var(--red)">забанен</span>':'<span style="color:var(--green)">активен</span>'}</td>
+        <td>${timeAgo(u.lastSeen)}</td>
+        <td><div class="td-actions">${banBtn}${delBtn}</div></td>
+      </tr>`;
+    }).join('');
+    document.getElementById('adminTabBody').innerHTML = `<div class="atable-wrap"><table class="atable">
+      <thead><tr><th>Юзер</th><th>Роль</th><th>Статус</th><th>Активность</th><th>Действия</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  } catch (e) { document.getElementById('adminTabBody').innerHTML = '<div class="empty-state">Ошибка: ' + esc(e.message) + '</div>'; }
+}
+
+async function setUserRole(id, role) {
+  try {
+    await api(`/users/${id}/role`, { method:'POST', body:{ role } });
+    toast('Роль изменена', 'ok');
+    renderAdminUsers();
+  } catch (e) { toast(e.message, 'err'); renderAdminUsers(); }
+}
+async function banUser(id, banned) {
+  try {
+    await api(`/users/${id}/ban`, { method:'POST', body:{ banned } });
+    toast(banned?'Забанен':'Разбанен', 'ok');
+    renderAdminUsers();
+  } catch (e) { toast(e.message, 'err'); }
+}
+function deleteUser(id, name) {
+  confirm2('Удалить пользователя?', `@${name} удалится навсегда.`, '⚠️', async () => {
+    try { await api('/users/' + id, { method:'DELETE' }); toast('Удалён', 'ok'); renderAdminUsers(); }
+    catch (e) { toast(e.message, 'err'); }
+  });
+}
+
+async function renderAdminProfiles() {
+  await loadProfiles();
+  const rows = profiles.map(p => `<tr>
+    <td><b>${esc(p.name)}</b>${p.pinned?' 📌':''}${p.hidden?' 🙈':''}</td>
+    <td>${timeAgo(p.createdAt)}</td>
+    <td><div class="td-actions">
+      <button class="act-btn" onclick="adminEditProfile(${p.id});closeAdmin()">✏️</button>
+      <button class="act-btn y" onclick="quickTogglePin(${p.id})">📌</button>
+      <button class="act-btn y" onclick="quickToggleHide(${p.id})">${p.hidden?'👁':'🙈'}</button>
+      <button class="act-btn d" onclick="quickDeleteProfile(${p.id})">🗑️</button>
+    </div></td>
+  </tr>`).join('');
+  document.getElementById('adminTabBody').innerHTML = profiles.length ?
+    `<div class="atable-wrap"><table class="atable">
+      <thead><tr><th>Имя</th><th>Создана</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<div class="empty-state">Анкет нет</div>';
+}
+
+async function renderAdminTopics() {
+  await loadTopics();
+  const rows = topics.map(t => `<tr>
+    <td><b>${esc(t.title)}</b>${t.pinned?' 📌':''}${t.hidden?' 🙈':''}<br><span style="color:var(--muted);font-size:11px">@${esc(t.author)}</span></td>
+    <td>${t.postsCount||0}</td>
+    <td>${timeAgo(t.createdAt)}</td>
+    <td><div class="td-actions">
+      <button class="act-btn y" onclick="quickTogglePinTopic(${t.id})">📌</button>
+      <button class="act-btn y" onclick="quickToggleHideTopic(${t.id})">${t.hidden?'👁':'🙈'}</button>
+      <button class="act-btn d" onclick="quickDeleteTopic(${t.id})">🗑️</button>
+    </div></td>
+  </tr>`).join('');
+  document.getElementById('adminTabBody').innerHTML = topics.length ?
+    `<div class="atable-wrap"><table class="atable">
+      <thead><tr><th>Тема</th><th>Ответов</th><th>Создана</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<div class="empty-state">Тем нет</div>';
+}
+
+async function renderAdminAudit() {
+  try {
+    const { log } = await api('/audit');
+    const rows = log.map(l => `<tr>
+      <td>${timeAgo(l.created_at)}</td>
+      <td>@${esc(l.actor_name)}</td>
+      <td><b>${esc(l.action)}</b></td>
+      <td>${esc(l.target||'')}</td>
+    </tr>`).join('');
+    document.getElementById('adminTabBody').innerHTML = log.length ?
+      `<div class="atable-wrap"><table class="atable">
+        <thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Цель</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : '<div class="empty-state">Лог пуст</div>';
+  } catch (e) { document.getElementById('adminTabBody').innerHTML = '<div class="empty-state">Ошибка</div>'; }
+}
+
+function renderAdminDanger() {
+  document.getElementById('adminTabBody').innerHTML = `
+    <div style="background:var(--card2);border:1px solid var(--red);border-radius:var(--r);padding:16px">
+      <h3 style="color:var(--red);margin-bottom:10px">⚠ Опасная зона</h3>
+      <p style="color:var(--text2);font-size:12px;margin-bottom:14px">Эти действия удаляют данные навсегда.</p>
+      <button class="btn btn-danger btn-sm" onclick="purgeAllProfiles()" style="margin-right:8px">Удалить все анкеты</button>
+      <button class="btn btn-danger btn-sm" onclick="purgeAllTopics()">Удалить все темы</button>
+    </div>`;
+}
+function purgeAllProfiles() {
+  confirm2('Удалить ВСЕ анкеты?', 'Все анкеты и комментарии будут удалены навсегда.', '⚠️', async () => {
+    let ok = 0, fail = 0;
+    for (const p of profiles) { try { await api('/profiles/' + p.id, { method:'DELETE' }); ok++; } catch { fail++; } }
+    toast(`Удалено: ${ok}, ошибок: ${fail}`, 'ok');
+    await loadProfiles(); renderAdmin();
+  });
+}
+function purgeAllTopics() {
+  confirm2('Удалить ВСЕ темы?', 'Все темы и сообщения форума будут удалены навсегда.', '⚠️', async () => {
+    let ok = 0, fail = 0;
+    for (const t of topics) { try { await api('/topics/' + t.id, { method:'DELETE' }); ok++; } catch { fail++; } }
+    toast(`Удалено: ${ok}, ошибок: ${fail}`, 'ok');
+    await loadTopics(); renderAdmin();
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SITE EDITOR (live design changes)
+// ════════════════════════════════════════════════════════════════════
+function openSiteEditor() {
+  if (!isAdmin()) return;
+  const s = siteSettings;
+  document.getElementById('siteEditorBody').innerHTML = `
+    <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Изменения применяются ко всему сайту для всех пользователей.</p>
+    <div class="site-editor-grid">
+      <div class="fgroup"><label class="flabel">Название сайта</label><input class="finput" id="seName" value="${esc(s.siteName)}"></div>
+      <div class="fgroup"><label class="flabel">Цвет акцента</label><input class="finput" id="seAccent" type="color" value="${esc(s.accent||'#e8632a')}" style="height:36px"></div>
+    </div>
+    <div class="fgroup"><label class="flabel">Приветствие в сайдбаре</label><textarea class="ftextarea" id="seWelcome">${esc(s.welcome)}</textarea></div>
+    <div class="fgroup">
+      <label class="switch">
+        <input type="checkbox" id="seAnon" ${s.adminAnon?'checked':''}>
+        <span class="slider"></span>
+        <span>Режим анонимности для админов (показываться как «Анонимный админ»)</span>
+      </label>
+    </div>
+    <button class="btn btn-primary" onclick="saveSiteSettings()">Сохранить</button>`;
+  document.getElementById('siteEditorOverlay').classList.add('open');
+}
+function closeSiteEditor() { document.getElementById('siteEditorOverlay').classList.remove('open'); }
+
+async function saveSiteSettings() {
+  try {
+    await api('/settings', { method:'PATCH', body:{
+      siteName: document.getElementById('seName').value.trim() || 'ANKETA.FORUM',
+      accent: document.getElementById('seAccent').value,
+      welcome: document.getElementById('seWelcome').value.trim(),
+      adminAnon: document.getElementById('seAnon').checked
+    } });
+    await loadSettings();
+    renderHeader();
+    render();
+    toast('Настройки применены', 'ok');
+    closeSiteEditor();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  DATA LOADING
+// ════════════════════════════════════════════════════════════════════
+async function loadSettings() {
+  try { const { settings } = await api('/settings'); siteSettings = settings; } catch {}
+}
+async function loadMe() {
+  try { const { user } = await api('/auth/me'); curUser = user; } catch { curUser = null; }
+}
+async function loadProfiles() {
+  try { const { profiles: p } = await api('/profiles'); profiles = p; } catch { profiles = []; }
+}
+async function loadTopics() {
+  try { const { topics: t } = await api('/topics'); topics = t; } catch { topics = []; }
+}
+async function loadStats() {
+  try {
+    const s = await api('/stats');
+    document.getElementById('sUsers').textContent = s.users;
+    document.getElementById('sProfiles').textContent = s.profiles;
+    document.getElementById('sTopics').textContent = s.topics;
+  } catch {}
+}
+
+async function loadAll() {
+  await Promise.all([loadSettings(), loadMe()]);
+  await Promise.all([loadProfiles(), loadTopics(), loadStats()]);
+  renderHeader();
+  render();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SOCKET.IO — real-time
+// ════════════════════════════════════════════════════════════════════
+let socket = null;
+
+function initSocket() {
+  // Берём JWT из cookie для авторизации сокета
+  const token = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('token='))?.split('=')[1] || '';
+  socket = io({ auth: { token }, reconnectionDelay: 1000, reconnectionAttempts: Infinity });
+
+  socket.on('connect', () => console.log('[ws] connected', socket.id));
+  socket.on('disconnect', () => console.log('[ws] disconnected'));
+
+  // Новая анкета — добавить в список без перезагрузки
+  socket.on('profile:created', p => {
+    if (!profiles.find(x => x.id === p.id)) {
+      profiles.unshift(p);
+      if (curPage === 'home') render();
+    }
+    loadStats();
+  });
+
+  // Анкета обновлена (пин, скрытие, редактирование)
+  socket.on('profile:updated', p => {
+    const idx = profiles.findIndex(x => x.id === p.id);
+    if (idx >= 0) profiles[idx] = p; else profiles.unshift(p);
+    if (curPage === 'home') render();
+    // Если эта анкета открыта в модале — обновить шапку
+    if (curProfile?.profile.id === p.id) {
+      curProfile.profile = p;
+      renderProfileModal();
+    }
+  });
+
+  // Анкета удалена
+  socket.on('profile:deleted', ({ id }) => {
+    profiles = profiles.filter(x => x.id !== id);
+    if (curPage === 'home') render();
+    if (curProfile?.profile.id === id) closeProfile();
+    loadStats();
+  });
+
+  // Новый комментарий к открытой анкете
+  socket.on('comment:new', c => {
+    if (!curProfile || curProfile.profile.id !== c.profile_id) return;
+    if (curProfile.comments.find(x => x.id === c.id)) return; // дубль
+    curProfile.comments.push(c);
+    renderProfileModal();
+    // Автоскролл вниз в модале
+    const mb = document.getElementById('profileBody');
+    if (mb) mb.scrollTop = mb.scrollHeight;
+  });
+
+  // Комментарий удалён
+  socket.on('comment:deleted', ({ id }) => {
+    if (!curProfile) return;
+    curProfile.comments = curProfile.comments.filter(x => x.id !== id);
+    renderProfileModal();
+  });
+
+  // Новая тема форума
+  socket.on('topic:created', t => {
+    if (!topics.find(x => x.id === t.id)) {
+      topics.unshift(t);
+      if (curPage === 'forum') render();
+    }
+    loadStats();
+  });
+
+  // Тема обновлена (пин, скрытие)
+  socket.on('topic:updated', t => {
+    const idx = topics.findIndex(x => x.id === t.id);
+    if (idx >= 0) topics[idx] = t; else topics.unshift(t);
+    if (curPage === 'forum') render();
+  });
+
+  // Тема удалена
+  socket.on('topic:deleted', ({ id }) => {
+    topics = topics.filter(x => x.id !== id);
+    if (curPage === 'forum') render();
+    if (curTopic?.topic.id === id) closeTopic();
+    loadStats();
+  });
+
+  // Обновился счётчик ответов у темы
+  socket.on('topic:posts_count', ({ topicId, count }) => {
+    const t = topics.find(x => x.id === topicId);
+    if (t) { t.postsCount = count; if (curPage === 'forum') render(); }
+  });
+
+  // Новый пост в открытой теме
+  socket.on('post:new', p => {
+    if (!curTopic || curTopic.topic.id !== p.topic_id) return;
+    if (curTopic.posts.find(x => x.id === p.id)) return; // дубль
+    curTopic.posts.push(p);
+    renderTopicModal();
+    const mb = document.getElementById('topicBody');
+    if (mb) mb.scrollTop = mb.scrollHeight;
+  });
+
+  // Пост удалён в открытой теме
+  socket.on('post:deleted', ({ id }) => {
+    if (!curTopic) return;
+    curTopic.posts = curTopic.posts.filter(x => x.id !== id);
+    renderTopicModal();
+  });
+
+  // Настройки сайта изменились (цвет акцента, название и т.д.)
+  socket.on('settings:updated', upd => {
+    Object.assign(siteSettings, upd);
+    renderHeader();
+    render();
+  });
+
+  // Роль текущего юзера изменилась — перезагрузить его данные
+  socket.on('user:role_changed', async ({ userId }) => {
+    if (curUser && curUser.id === userId) {
+      await loadMe();
+      renderHeader();
+      render();
+      toast('Твоя роль была изменена', 'warn');
+    }
+  });
+
+  // Обновить статистику в сайдбаре
+  socket.on('stats:update', () => loadStats());
+}
+
+// Подписываем сокет на комнату конкретной анкеты
+function socketJoinProfile(id) { if (socket) socket.emit('join:profile', id); }
+function socketLeaveProfile(id) { if (socket) socket.emit('leave:profile', id); }
+function socketJoinTopic(id)   { if (socket) socket.emit('join:topic', id); }
+function socketLeaveTopic(id)  { if (socket) socket.emit('leave:topic', id); }
+
+// ════════════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════════════
+loadAll().then(() => initSocket());
+</script>
+</body>
+</html>
