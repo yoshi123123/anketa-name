@@ -219,9 +219,11 @@ a{color:var(--accent);text-decoration:none}
   <nav id="bottomNav">
     <button class="bnav active" id="bnavHome" onclick="nav('home')"><span class="ico">🏠</span>Анкеты</button>
     <button class="bnav" id="bnavForum" onclick="nav('forum')"><span class="ico">💬</span>Форум</button>
-    <button class="bnav" id="bnavCreate" onclick="requireAuth(()=>nav('create'))"><span class="ico">➕</span>Создать</button>
+    <button class="bnav" id="bnavFriends" onclick="requireAuth(()=>{friendsTab='friends';openFriendsModal()})" style="position:relative"><span class="ico">👥</span>Друзья<span id="bnavFriendsBadge" style="display:none;position:absolute;top:4px;right:18%;background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:100px;min-width:14px;text-align:center"></span></button>
+    <button class="bnav" id="bnavChats" onclick="requireAuth(()=>{friendsTab='chats';openFriendsModal()})" style="position:relative"><span class="ico">💌</span>Чаты<span id="bnavChatsBadge" style="display:none;position:absolute;top:4px;right:18%;background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:100px;min-width:14px;text-align:center"></span></button>
     <button class="bnav" id="bnavMe" onclick="onMeBtn()"><span class="ico" id="bnavMeIco">👤</span><span id="bnavMeLbl">Войти</span></button>
   </nav>
+  <button id="fabCreate" onclick="requireAuth(()=>nav('create'))" style="position:fixed;bottom:calc(var(--nav-h) + var(--safe-bottom) + 16px);right:16px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:26px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:50;cursor:pointer">➕</button>
 </div>
 
 <!-- PROFILE SHEET -->
@@ -274,6 +276,35 @@ a{color:var(--accent);text-decoration:none}
       <button class="sheet-close" onclick="closeSheet('userSheet')">✕</button>
     </div>
     <div class="sheet-body" id="userSheetBody"></div>
+  </div>
+</div>
+
+<!-- FRIENDS SHEET -->
+<div class="sheet-overlay" id="friendsSheet">
+  <div class="sheet" style="height:90vh">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">👥 Друзья</div>
+      <button class="sheet-close" onclick="closeSheet('friendsSheet')">✕</button>
+    </div>
+    <div class="sheet-body" id="friendsSheetBody"></div>
+  </div>
+</div>
+
+<!-- DM CHAT SHEET -->
+<div class="sheet-overlay" id="dmSheet">
+  <div class="sheet" style="height:92vh;display:flex;flex-direction:column">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <button onclick="closeSheet('dmSheet');friendsTab='chats';openFriendsModal()" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;margin-right:8px">←</button>
+      <div class="sheet-title" id="dmSheetTitle">Чат</div>
+      <button class="sheet-close" onclick="closeSheet('dmSheet')">✕</button>
+    </div>
+    <div id="dmSheetMessages" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px"></div>
+    <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
+      <input id="dmSheetInput" class="input" placeholder="Сообщение..." style="flex:1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendDmMobile()}">
+      <button class="btn btn-primary" onclick="sendDmMobile()" style="padding:0 16px">➤</button>
+    </div>
   </div>
 </div>
 
@@ -596,6 +627,14 @@ function renderCreate() {
   if (!curUser) { setTimeout(()=>openSheet('authSheet'),0); return '<div class="spinner"></div>'; }
   return `<div class="auth-card">
     <div class="ferr" id="cpErr"></div>
+    <div class="fgroup">
+      <label class="flabel">Аватарка анкеты</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div id="cpAvPreviewM" style="width:64px;height:64px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;border:2px solid var(--border);flex-shrink:0">👤</div>
+        <input type="file" id="cpAvFileM" accept="image/*" style="display:none" onchange="previewCpAvatarM()">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cpAvFileM').click()">📷 Выбрать фото</button>
+      </div>
+    </div>
     <div class="fgroup"><label class="flabel">Имя *</label><input class="finput" id="cpName" maxlength="50" placeholder="Как тебя зовут?"></div>
     <div class="fgroup"><label class="flabel">Возраст</label><input class="finput" id="cpAge" type="number" min="0" max="120" placeholder="Необязательно"></div>
     <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="cpBio" maxlength="2000" placeholder="Расскажи о себе..."></textarea></div>
@@ -606,13 +645,21 @@ function renderCreate() {
   </div>`;
 }
 
+function previewCpAvatarM() {
+  const f = document.getElementById('cpAvFileM').files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('cpAvPreviewM').innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`; };
+  reader.readAsDataURL(f);
+}
+
 async function submitCreate() {
   const name = document.getElementById('cpName').value.trim();
   const errEl = document.getElementById('cpErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Имя обязательно'; return; }
   try {
-    await api('/profiles', { method:'POST', body:{
+    const { profile } = await api('/profiles', { method:'POST', body:{
       name,
       age: +document.getElementById('cpAge').value || null,
       bio: document.getElementById('cpBio').value.trim(),
@@ -620,6 +667,14 @@ async function submitCreate() {
       emoji: document.getElementById('cpEmoji').value || '👤',
       color: document.getElementById('cpColor').value
     }});
+    const avFile = document.getElementById('cpAvFileM')?.files[0];
+    if (avFile && profile?.id) {
+      try {
+        const fd = new FormData();
+        fd.append('avatar', avFile);
+        await fetch(`/api/profiles/${profile.id}/avatar`, { method:'POST', credentials:'include', body:fd });
+      } catch {}
+    }
     toast('Анкета опубликована!', 'ok');
     await loadProfiles();
     nav('home');
@@ -927,7 +982,7 @@ async function openUserProfile(userId) {
             <div style="font-size:18px;font-weight:700;color:${accentColor}">${esc(u.displayName)}</div>
             <div style="font-size:12px;color:var(--muted)">@${esc(u.username)} ${roleChip(u.role)}</div>
           </div>
-          ${isMe?`<button class="btn btn-secondary btn-sm" onclick="openSettings()">✏️ Изменить</button>`:''}
+          ${isMe?`<button class="btn btn-secondary btn-sm" onclick="openSettings()">✏️ Изменить</button>`:`<div id="userActionsM_${u.id}" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"></div>`}
         </div>
         ${u.status?`<div style="font-size:13px;color:var(--text2);margin-bottom:6px">🟢 ${esc(u.status)}</div>`:''}
         ${u.location?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">📍 ${esc(u.location)}</div>`:''}
@@ -945,6 +1000,27 @@ async function openUserProfile(userId) {
           </div>`).join('')}</div>`:''}
       </div>`;
     openSheet('userSheet');
+    // Подгружаем кнопки действий с пользователем
+    if (curUser && !isMe) {
+      try {
+        const { status } = await api(`/friends/status/${u.id}`);
+        const wrap = document.getElementById('userActionsM_' + u.id);
+        if (wrap) {
+          let btns = '';
+          if (status === 'friends') {
+            btns = `<button onclick="openDmChatM(${u.id})" style="background:var(--accent);color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px">💬 Написать</button>
+            <button onclick="if(confirm('Удалить из друзей?'))friendActionM('remove',${u.id}).then(()=>openUserSheet(${u.id}))" style="background:var(--card2);color:var(--text);border:none;padding:6px 12px;border-radius:8px;font-size:12px">✓ В друзьях</button>`;
+          } else if (status === 'pending_outgoing') {
+            btns = `<button style="background:var(--card2);color:var(--muted);border:none;padding:6px 12px;border-radius:8px;font-size:12px" disabled>⏳ Заявка отправлена</button>`;
+          } else if (status === 'pending_incoming') {
+            btns = `<button onclick="friendActionM('accept',${u.id}).then(()=>openUserSheet(${u.id}))" style="background:var(--green);color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px">✓ Принять заявку</button>`;
+          } else {
+            btns = `<button onclick="friendActionM('request',${u.id}).then(()=>openUserSheet(${u.id}))" style="background:var(--accent);color:#fff;border:none;padding:6px 12px;border-radius:8px;font-size:12px">➕ В друзья</button>`;
+          }
+          wrap.innerHTML = btns;
+        }
+      } catch {}
+    }
   } catch(e) { toast(e.message,'err'); }
 }
 
@@ -965,9 +1041,137 @@ function openSettings() {
 // ═══════════════════════════════════════════════════════════════
 //  SOCKET.IO
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  FRIENDS & DM (mobile)
+// ═══════════════════════════════════════════════════════════════
+let friendsTab = 'friends';
+let pendingFriendRequests = 0;
+let unreadDmCount = 0;
+let dmUserId = null;
+let friendSearchTimer = null;
+
+function updateMobileNotifBadges() {
+  const bf = document.getElementById('bnavFriendsBadge');
+  if (bf) { bf.style.display = pendingFriendRequests > 0 ? '' : 'none'; bf.textContent = pendingFriendRequests; }
+  const bc = document.getElementById('bnavChatsBadge');
+  if (bc) { bc.style.display = unreadDmCount > 0 ? '' : 'none'; bc.textContent = unreadDmCount; }
+}
+
+async function loadNotifCounts() {
+  if (!curUser) return;
+  try { const { requests } = await api('/friends/requests/incoming'); pendingFriendRequests = requests.length; } catch {}
+  try { const { unread } = await api('/dm/unread-count'); unreadDmCount = unread; } catch {}
+  updateMobileNotifBadges();
+}
+
+function friendAvHtmlMobile(u) {
+  return u.avatar
+    ? `<img src="${esc(u.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+    : `<div style="width:44px;height:44px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${esc(u.emoji||'👤')}</div>`;
+}
+
+async function openFriendsModal() {
+  if (!curUser) return;
+  document.getElementById('friendsSheet').classList.add('open');
+  await renderFriendsSheet();
+}
+
+async function renderFriendsSheet() {
+  const tabs = [['search','🔍 Поиск'],['friends','👥 Друзья'],['chats','💬 Чаты'],['incoming','📩 Заявки']];
+  const tabBar = `<div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px">
+    ${tabs.map(([k,l])=>`<button onclick="friendsTab='${k}';renderFriendsSheet()" style="background:${friendsTab===k?'var(--accent)':'var(--card2)'};color:${friendsTab===k?'#fff':'var(--text)'};border:none;padding:8px 12px;border-radius:100px;font-size:12px;white-space:nowrap;cursor:pointer">${l}${k==='incoming'&&pendingFriendRequests>0?` <span style="background:var(--red);color:#fff;font-size:10px;padding:1px 5px;border-radius:100px">${pendingFriendRequests}</span>`:''}${k==='chats'&&unreadDmCount>0?` <span style="background:var(--red);color:#fff;font-size:10px;padding:1px 5px;border-radius:100px">${unreadDmCount}</span>`:''}</button>`).join('')}
+  </div>`;
+  let content = '<div style="text-align:center;color:var(--muted);padding:24px">Загрузка...</div>';
+  document.getElementById('friendsSheetBody').innerHTML = tabBar + content;
+  try {
+    if (friendsTab === 'search') {
+      content = `<div style="margin-bottom:12px"><input id="friendSearchInputM" class="input" placeholder="Поиск..." style="width:100%;box-sizing:border-box" oninput="debouncedFriendSearchM()" autofocus></div><div id="friendSearchResultsM"><div style="text-align:center;color:var(--muted);padding:24px">🔍 Введи имя</div></div>`;
+    }
+    else if (friendsTab === 'friends') {
+      const { friends } = await api(`/friends/${curUser.id}`);
+      content = !friends.length ? '<div style="text-align:center;color:var(--muted);padding:24px">👥 Друзей пока нет</div>'
+        : friends.map(u=>`<div style="display:flex;gap:10px;align-items:center;padding:10px;border-bottom:1px solid var(--border)" onclick="closeSheet('friendsSheet');openUserSheet(${u.id})">${friendAvHtmlMobile(u)}<div style="flex:1;min-width:0"><div style="font-weight:600">${esc(u.displayName)}</div><div style="font-size:11px;color:var(--muted)">@${esc(u.username)}</div></div><button onclick="event.stopPropagation();openDmChatM(${u.id})" style="background:var(--accent);color:#fff;border:none;padding:6px 10px;border-radius:8px;font-size:12px">💬</button></div>`).join('');
+    }
+    else if (friendsTab === 'chats') {
+      const { conversations } = await api('/dm/conversations');
+      content = !conversations.length ? '<div style="text-align:center;color:var(--muted);padding:24px">💬 Нет диалогов</div>'
+        : conversations.map(u=>`<div style="display:flex;gap:10px;align-items:center;padding:10px;border-bottom:1px solid var(--border)" onclick="openDmChatM(${u.id})">${friendAvHtmlMobile(u)}<div style="flex:1;min-width:0"><div style="font-weight:600;display:flex;align-items:center;gap:6px">${esc(u.displayName)} ${u.unread>0?`<span style="background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:100px">${u.unread}</span>`:''}</div><div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.lastText?esc(u.lastText.slice(0,40)):'Нет сообщений'}</div></div></div>`).join('');
+    }
+    else if (friendsTab === 'incoming') {
+      const { requests } = await api('/friends/requests/incoming');
+      content = !requests.length ? '<div style="text-align:center;color:var(--muted);padding:24px">📩 Входящих заявок нет</div>'
+        : requests.map(u=>`<div style="display:flex;gap:10px;align-items:center;padding:10px;border-bottom:1px solid var(--border)">${friendAvHtmlMobile(u)}<div style="flex:1;min-width:0"><div style="font-weight:600">${esc(u.displayName)}</div><div style="font-size:11px;color:var(--muted)">@${esc(u.username)}</div></div><button onclick="friendActionM('accept',${u.id})" style="background:var(--green);color:#fff;border:none;padding:6px 10px;border-radius:8px;font-size:12px">✓</button><button onclick="friendActionM('decline',${u.id})" style="background:var(--card2);color:var(--text);border:none;padding:6px 10px;border-radius:8px;font-size:12px">✕</button></div>`).join('');
+    }
+  } catch(e) { content = `<div style="color:var(--red);padding:16px">${esc(e.message)}</div>`; }
+  document.getElementById('friendsSheetBody').innerHTML = tabBar + content;
+}
+
+function debouncedFriendSearchM() { clearTimeout(friendSearchTimer); friendSearchTimer = setTimeout(doFriendSearchM, 350); }
+async function doFriendSearchM() {
+  const q = (document.getElementById('friendSearchInputM')?.value||'').trim();
+  const res = document.getElementById('friendSearchResultsM');
+  if (!res) return;
+  if (!q) { res.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">🔍 Введи имя</div>'; return; }
+  res.innerHTML = '<div style="text-align:center;color:var(--muted);padding:16px">Поиск...</div>';
+  try {
+    const users = await api(`/users/search?q=${encodeURIComponent(q)}`);
+    res.innerHTML = !users.length ? '<div style="text-align:center;color:var(--muted);padding:24px">😶 Никого</div>'
+      : users.map(u=>`<div style="display:flex;gap:10px;align-items:center;padding:10px;border-bottom:1px solid var(--border)" onclick="closeSheet('friendsSheet');openUserSheet(${u.id})">${friendAvHtmlMobile(u)}<div style="flex:1;min-width:0"><div style="font-weight:600">${esc(u.displayName)}</div><div style="font-size:11px;color:var(--muted)">@${esc(u.username)}</div></div>${u.id===curUser?.id?'':`<button id="fsBtnM_${u.id}" onclick="event.stopPropagation();friendSearchAddM(${u.id})" style="background:var(--accent);color:#fff;border:none;padding:6px 10px;border-radius:8px;font-size:14px">➕</button>`}</div>`).join('');
+  } catch(e) { res.innerHTML = `<div style="color:var(--red);padding:16px">${esc(e.message)}</div>`; }
+}
+async function friendSearchAddM(userId) {
+  try { await friendActionM('request', userId); const btn = document.getElementById(`fsBtnM_${userId}`); if (btn) btn.outerHTML = '<span style="color:var(--green);font-size:12px">✓</span>'; }
+  catch(e) { toast(e.message,'err'); }
+}
+async function friendActionM(action, userId) {
+  const map = {request:['POST','/friends/request'], accept:['POST','/friends/accept'], decline:['POST','/friends/decline'], remove:['DELETE','/friends']};
+  const [method, base] = map[action];
+  await api(`${base}/${userId}`, { method });
+  if (action !== 'request') await loadNotifCounts();
+  if (document.getElementById('friendsSheet').classList.contains('open')) renderFriendsSheet();
+}
+
+async function openDmChatM(userId) {
+  dmUserId = userId;
+  closeSheet('friendsSheet');
+  document.getElementById('dmSheet').classList.add('open');
+  document.getElementById('dmSheetMessages').innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">Загрузка...</div>';
+  try { const { user } = await api(`/users/${userId}/public`); document.getElementById('dmSheetTitle').textContent = '💬 ' + esc(user.displayName||user.username); } catch {}
+  const { messages } = await api(`/dm/${userId}`);
+  renderDmMessagesM(messages);
+  setTimeout(()=>document.getElementById('dmSheetInput').focus(), 100);
+  try { const { unread } = await api('/dm/unread-count'); unreadDmCount = unread; updateMobileNotifBadges(); } catch {}
+}
+function renderDmMessagesM(msgs) {
+  const el = document.getElementById('dmSheetMessages');
+  if (!el) return;
+  el.innerHTML = msgs.length ? msgs.map(m => {
+    const mine = m.from_id === curUser?.id;
+    const av = m.avatar ? `<img src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(m.emoji||'👤')}</div>`;
+    return `<div style="display:flex;gap:8px;align-items:flex-end;${mine?'flex-direction:row-reverse':''}">${av}<div style="max-width:70%"><div style="background:${mine?'var(--accent)':'var(--card2)'};color:${mine?'#fff':'var(--text)'};padding:8px 12px;border-radius:${mine?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:14px;word-break:break-word">${esc(m.text)}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:${mine?'right':'left'}">${new Date(m.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div></div></div>`;
+  }).join('') : '<div style="text-align:center;color:var(--muted);padding:24px">Напиши первым!</div>';
+  el.scrollTop = el.scrollHeight;
+}
+async function sendDmMobile() {
+  const inp = document.getElementById('dmSheetInput');
+  const text = inp.value.trim();
+  if (!text || !dmUserId) return;
+  inp.value = '';
+  try { await api(`/dm/${dmUserId}`, { method:'POST', body:{ text } }); }
+  catch(e) { toast(e.message,'err'); inp.value = text; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SOCKET.IO
+// ═══════════════════════════════════════════════════════════════
 function initSocket() {
   const token = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('token='))?.split('=')[1]||'';
   socket = io({ auth:{token}, reconnectionDelay:1000 });
+
+  socket.on('connect', () => {
+    if (curProfile) socketJoin('profile', curProfile.profile.id);
+    if (curTopic) socketJoin('topic', curTopic.topic.id);
+  });
 
   socket.on('profile:created', p => { if(!profiles.find(x=>x.id===p.id)){profiles.unshift(p);if(curPage==='home')render();} });
   socket.on('profile:updated', p => { const i=profiles.findIndex(x=>x.id===p.id); if(i>=0)profiles[i]=p; else profiles.unshift(p); if(curPage==='home')render(); if(curProfile?.profile.id===p.id){curProfile.profile=p;renderProfileSheet();} });
@@ -981,9 +1185,33 @@ function initSocket() {
   socket.on('post:new', p => { if(curTopic && +curTopic.topic.id === +p.topicId && !curTopic.posts.find(x=>x.id===p.id)){curTopic.posts.push(p);renderTopicSheet();} });
   socket.on('post:deleted', ({id}) => { if(curTopic){curTopic.posts=curTopic.posts.filter(x=>x.id!==id);renderTopicSheet();} });
   socket.on('settings:updated', upd => { if(upd.accent)document.documentElement.style.setProperty('--accent',upd.accent); });
+
+  socket.on('friend:request', ({user:u}) => { pendingFriendRequests++; updateMobileNotifBadges(); toast(`📩 ${esc(u.displayName)} хочет в друзья`, 'ok'); });
+  socket.on('friend:accepted', ({user:u}) => toast(`✓ ${esc(u.displayName)} принял заявку!`, 'ok'));
+  socket.on('friend:removed', () => loadNotifCounts());
+  socket.on('dm:message', msg => {
+    const isOpen = document.getElementById('dmSheet').classList.contains('open');
+    const isMine = msg.from_id === curUser?.id;
+    const isCurrent = isOpen && (msg.from_id === dmUserId || msg.to_id === dmUserId);
+    if (isCurrent) {
+      const el = document.getElementById('dmSheetMessages');
+      const av = msg.avatar ? `<img src="${esc(msg.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(msg.emoji||'👤')}</div>`;
+      el.insertAdjacentHTML('beforeend', `<div style="display:flex;gap:8px;align-items:flex-end;${isMine?'flex-direction:row-reverse':''}">${av}<div style="max-width:70%"><div style="background:${isMine?'var(--accent)':'var(--card2)'};color:${isMine?'#fff':'var(--text)'};padding:8px 12px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:14px;word-break:break-word">${esc(msg.text)}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:${isMine?'right':'left'}">${new Date(msg.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div></div></div>`);
+      el.scrollTop = el.scrollHeight;
+      if (!isMine) api(`/dm/${msg.from_id}`);
+    } else if (!isMine) {
+      unreadDmCount++;
+      updateMobileNotifBadges();
+      toast(`💬 ${esc(msg.display_name||msg.username)}: ${esc(msg.text.slice(0,40))}`);
+    }
+  });
 }
 
-function socketJoin(type, id) { if(socket){socket.emit('join:'+type, id);} }
+function socketJoin(type, id) {
+  if (!socket) return;
+  if (socket.connected) socket.emit('join:'+type, id);
+  else socket.once('connect', () => socket.emit('join:'+type, id));
+}
 
 function scrollCommentsDown() {
   const sb = document.getElementById('profileSheetBody');
@@ -1024,7 +1252,7 @@ window.nav = function(page) {
   origNav(page);
 };
 
-loadAll().then(() => initSocket());
+loadAll().then(() => { initSocket(); if (curUser) loadNotifCounts(); });
 </script>
 </body>
 </html>

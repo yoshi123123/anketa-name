@@ -490,6 +490,8 @@ input,textarea,select{font-family:var(--font);outline:none}
       <button class="sb-nav-item" onclick="nav('home')"><span class="icon">🏠</span>Анкеты</button>
       <button class="sb-nav-item" onclick="nav('forum')"><span class="icon">💬</span>Форум</button>
       <button class="sb-nav-item" onclick="requireAuth(()=>nav('create'))"><span class="icon">➕</span>Моя анкета</button>
+      <button class="sb-nav-item" id="sbFriends" onclick="requireAuth(()=>{friendsTab='friends';openFriendsModal()})" style="position:relative"><span class="icon">👥</span>Друзья<span id="sbFriendsBadge" style="display:none;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:auto"></span></button>
+      <button class="sb-nav-item" id="sbChats" onclick="requireAuth(()=>{friendsTab='chats';openFriendsModal()})" style="position:relative"><span class="icon">💌</span>Чаты<span id="sbChatsBadge" style="display:none;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:auto"></span></button>
     </div>
     <div class="sidebar-block">
       <div class="sb-title">Статистика</div>
@@ -1014,9 +1016,34 @@ function renderCreateProfile() {
         <div class="fgroup" style="max-width:140px"><label class="flabel">Цвет</label><input class="finput" id="cpColor" type="color" value="#e8632a" style="height:36px;padding:2px"></div>
         <div class="fgroup"><label class="flabel">Теги (через запятую)</label><input class="finput" id="cpTags" placeholder="музыка, кино"></div>
       </div>
+      <div class="fgroup">
+        <label class="flabel">Аватарка анкеты (необязательно)</label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div id="cpAvPreview" style="width:64px;height:64px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;border:2px solid var(--border);flex-shrink:0">👤</div>
+          <input type="file" id="cpAvFile" accept="image/*" style="display:none" onchange="previewCpAvatar()">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cpAvFile').click()">📷 Выбрать фото</button>
+          <button type="button" id="cpAvClear" class="btn btn-ghost btn-sm" style="display:none" onclick="clearCpAvatar()">✕</button>
+        </div>
+      </div>
       <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="cpBio" maxlength="2000" placeholder="Опиши себя..."></textarea></div>
       <button class="btn btn-primary btn-block" onclick="submitCreateProfile()">Опубликовать анкету</button>
     </div>`;
+}
+
+function previewCpAvatar() {
+  const f = document.getElementById('cpAvFile').files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('cpAvPreview').innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+    document.getElementById('cpAvClear').style.display = '';
+  };
+  reader.readAsDataURL(f);
+}
+function clearCpAvatar() {
+  document.getElementById('cpAvFile').value = '';
+  document.getElementById('cpAvPreview').innerHTML = '👤';
+  document.getElementById('cpAvClear').style.display = 'none';
 }
 
 function updateAnonHints() {
@@ -1063,11 +1090,20 @@ async function submitCreateProfile() {
   const tags  = document.getElementById('cpTags').value.split(',').map(s=>s.trim()).filter(Boolean);
   const anon  = document.getElementById('cpAnon')?.checked || false;
   const showInProfile = document.getElementById('cpShowInProfile')?.checked ?? true;
+  const avFile = document.getElementById('cpAvFile')?.files[0];
   const errEl = document.getElementById('cpErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Имя обязательно'; return; }
   try {
-    await api('/profiles', { method:'POST', body:{ name, age, emoji, color, bio, tags, anon, showInProfile } });
+    const { profile } = await api('/profiles', { method:'POST', body:{ name, age, emoji, color, bio, tags, anon, showInProfile } });
+    // Если выбрана аватарка — загружаем
+    if (avFile && profile?.id) {
+      try {
+        const fd = new FormData();
+        fd.append('avatar', avFile);
+        await fetch(`/api/profiles/${profile.id}/avatar`, { method:'POST', credentials:'include', body:fd });
+      } catch {}
+    }
     toast(anon ? '🥷 Анонимная анкета опубликована' : '✓ Анкета опубликована', 'ok');
     await loadProfiles();
     nav('home');
@@ -2441,6 +2477,17 @@ function updateNotifBadges() {
   if (badge) {
     badge.style.display = total > 0 ? '' : 'none';
     badge.textContent = total;
+  }
+  // Sidebar badges - отдельно
+  const sbF = document.getElementById('sbFriendsBadge');
+  if (sbF) {
+    sbF.style.display = pendingFriendRequests > 0 ? '' : 'none';
+    sbF.textContent = pendingFriendRequests;
+  }
+  const sbC = document.getElementById('sbChatsBadge');
+  if (sbC) {
+    sbC.style.display = unreadDmCount > 0 ? '' : 'none';
+    sbC.textContent = unreadDmCount;
   }
 }
 
