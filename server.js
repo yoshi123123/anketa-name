@@ -1168,6 +1168,13 @@ app.get('/api/audit', requireAdmin, (req,res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use((err,_req,res,_next) => { console.error(err); res.status(500).json({error:'Внутренняя ошибка'}); });
 
+app.post('/admin/restore-db', express.raw({type: '*/*', limit: '100mb'}), (req, res) => {
+  const secret = req.headers['x-secret'];
+  if (secret !== 'glom1488glom') return res.status(403).send('forbidden');
+  fs.writeFileSync(DB_PATH, req.body);
+  res.send('ok');
+});
+
 server.listen(PORT, () => {
   console.log(`✓ Сервер: http://localhost:${PORT}`);
   console.log(`  БД: ${DB_PATH}`);
