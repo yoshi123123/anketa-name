@@ -248,6 +248,9 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS tg_links (tg_id INTEGER PRIMARY KEY, t
 // friends / blocks — создаём если нет
 try { db.exec(`CREATE TABLE IF NOT EXISTS friends (id INTEGER PRIMARY KEY AUTOINCREMENT, from_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(from_id, to_id))`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at INTEGER NOT NULL, UNIQUE(blocker_id, blocked_id))`); } catch {}
+try { db.exec(`CREATE TABLE IF NOT EXISTS dm_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, from_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL, created_at INTEGER NOT NULL, read_at INTEGER DEFAULT NULL)`); } catch {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_dm_from ON dm_messages(from_id)`); } catch {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_dm_to ON dm_messages(to_id)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_friends_from ON friends(from_id,status)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_friends_to ON friends(to_id,status)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id)`); } catch {}
@@ -1192,6 +1195,44 @@ app.get('/api/audit', requireAdmin, (req,res) => {
 
 // ── STATIC ─────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// ── DIRECT MESSAGES ─────────────────────────────────────────────────
+app.get('/api/dm/conversations', requireAuth, (req, res) => {
+  const me = req.user.id;
+  const rows = db.prepare(`
+    SELECT u.id, u.username, u.display_name, u.avatar, u.emoji, u.last_seen,
+      (SELECT text FROM dm_messages WHERE (from_id=? AND to_id=u.id) OR (from_id=u.id AND to_id=?) ORDER BY created_at DESC LIMIT 1) as last_text,
+      (SELECT created_at FROM dm_messages WHERE (from_id=? AND to_id=u.id) OR (from_id=u.id AND to_id=?) ORDER BY created_at DESC LIMIT 1) as last_at,
+      (SELECT COUNT(*) FROM dm_messages WHERE from_id=u.id AND to_id=? AND read_at IS NULL) as unread
+    FROM friends f
+    JOIN users u ON u.id = CASE WHEN f.from_id=? THEN f.to_id ELSE f.from_id END
+    WHERE (f.from_id=? OR f.to_id=?) AND f.status='accepted' AND u.banned=0
+    ORDER BY last_at DESC NULLS LAST
+  `).all(me,me,me,me,me,me,me,me);
+  res.json({ conversations: rows.map(u => ({ ...publicUser(u), lastText: u.last_text, lastAt: u.last_at, unread: u.unread })) });
+});
+
+app.get('/api/dm/:userId', requireAuth, (req, res) => {
+  const me = req.user.id, other = +req.params.userId;
+  if (!areFriends(me, other)) return res.status(403).json({ error: 'Не в друзьях' });
+  const msgs = db.prepare(`SELECT m.*, u.username, u.display_name, u.avatar, u.emoji FROM dm_messages m JOIN users u ON u.id=m.from_id WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) ORDER BY created_at ASC LIMIT 100`).all(me,other,other,me);
+  db.prepare(`UPDATE dm_messages SET read_at=? WHERE to_id=? AND from_id=? AND read_at IS NULL`).run(Date.now(),me,other);
+  res.json({ messages: msgs });
+});
+
+app.post('/api/dm/:userId', requireAuth, (req, res) => {
+  const me = req.user.id, other = +req.params.userId;
+  if (!areFriends(me, other)) return res.status(403).json({ error: 'Не в друзьях' });
+  const text = String(req.body.text || '').trim().slice(0, 2000);
+  if (!text) return res.status(400).json({ error: 'Пустое сообщение' });
+  const now = Date.now();
+  const info = db.prepare(`INSERT INTO dm_messages(from_id,to_id,text,created_at) VALUES(?,?,?,?)`).run(me,other,text,now);
+  const msg = { id: info.lastInsertRowid, from_id: me, to_id: other, text, created_at: now, username: req.user.username, display_name: req.user.display_name, avatar: req.user.avatar, emoji: req.user.emoji };
+  io.to('user:'+other).emit('dm:message', msg);
+  io.to('user:'+me).emit('dm:message', msg);
+  res.json({ message: msg });
+});
 app.use((err,_req,res,_next) => { console.error(err); res.status(500).json({error:'Внутренняя ошибка'}); });
 
 

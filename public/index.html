@@ -635,6 +635,22 @@ input,textarea,select{font-family:var(--font);outline:none}
   </div>
 </div>
 
+<!-- DM CHAT -->
+<div class="overlay" id="dmOverlay">
+  <div class="modal modal-lg" style="display:flex;flex-direction:column;height:80vh;max-height:600px">
+    <div class="modal-head">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('dmOverlay').classList.remove('open');friendsTab='chats';openFriendsModal()" style="margin-right:8px">←</button>
+      <div class="modal-title" id="dmTitle">💬 Чат</div>
+      <button class="modal-close" onclick="document.getElementById('dmOverlay').classList.remove('open')">✕</button>
+    </div>
+    <div id="dmMessages" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px"></div>
+    <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px">
+      <input id="dmInput" class="input" placeholder="Сообщение..." style="flex:1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendDm()}">
+      <button class="btn btn-primary" onclick="sendDm()">➤</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIRM MODAL -->
 <div class="overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -2402,6 +2418,7 @@ function friendButtonHtml(userId, status) {
         <button class="friend-btn friend-btn-friends" onclick="toggleFriendMenu(${userId})">✓ В друзьях ▾</button>
         <div class="friend-actions-menu" id="fam_${userId}">
           <button class="friend-menu-item" onclick="closeFriendMenu(${userId});openUserProfile(${userId})">👤 Профиль</button>
+          <button class="friend-menu-item" onclick="closeFriendMenu(${userId});openDmChat(${userId})">💬 Написать</button>
           <button class="friend-menu-item red" onclick="closeFriendMenu(${userId});friendAction('remove',${userId})">👎 Удалить из друзей</button>
           <button class="friend-menu-item red" onclick="closeFriendMenu(${userId});friendAction('block',${userId})">🚫 Заблокировать</button>
         </div>
@@ -2473,6 +2490,7 @@ async function renderFriendsModal() {
   const tabs = [
     ['search','🔍 Поиск'],
     ['friends','👥 Друзья'],
+    ['chats','💬 Чаты'],
     ['incoming','📩 Заявки'],
     ['outgoing','📤 Исходящие'],
     ['blocked','🚫 Блокировки'],
@@ -2491,6 +2509,21 @@ async function renderFriendsModal() {
         <input id="friendSearchInput" class="input" placeholder="Поиск по @юзернейму..." style="width:100%;box-sizing:border-box" oninput="debouncedFriendSearch()" autofocus>
       </div>
       <div id="friendSearchResults"><div class="empty-state"><div class="icon">🔍</div><h3>Введи имя пользователя</h3></div></div>`;
+    }
+    else if (friendsTab === 'chats') {
+      const { conversations } = await api('/dm/conversations');
+      if (!conversations.length) {
+        content = '<div class="empty-state"><div class="icon">💬</div><h3>Нет диалогов</h3><div>Напиши другу через его профиль</div></div>';
+      } else {
+        content = `<div class="friends-list">${conversations.map(u=>`
+          <div class="friend-row" onclick="openDmChat(${u.id})" style="cursor:pointer">
+            ${friendAvHtml(u)}
+            <div class="friend-info" style="flex:1;min-width:0">
+              <div class="friend-name">${esc(u.displayName)} ${u.unread>0?`<span style="background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:100px">${u.unread}</span>`:''}</div>
+              <div class="friend-sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.lastText?esc(u.lastText.slice(0,50)):'Нет сообщений'}</div>
+            </div>
+          </div>`).join('')}</div>`;
+      }
     }
     else if (friendsTab === 'friends') {
       const { friends, hidden } = await api(`/friends/${curUser.id}`);
@@ -2586,6 +2619,43 @@ async function saveFriendsPrivacy() {
 }
 
 // ── Socket.io события друзей ──────────────────────────────────────
+// ── DM CHAT ──────────────────────────────────────────────────────────
+let dmUserId = null, dmUserName = '';
+async function openDmChat(userId) {
+  dmUserId = userId;
+  document.getElementById('friendsOverlay').classList.remove('open');
+  document.getElementById('dmOverlay').classList.add('open');
+  const { messages } = await api(`/dm/${userId}`);
+  const other = messages.find(m => m.from_id === userId);
+  document.getElementById('dmTitle').textContent = '💬 ' + (other ? esc(other.display_name || other.username) : 'Чат');
+  renderDmMessages(messages);
+  document.getElementById('dmInput').focus();
+}
+function renderDmMessages(msgs) {
+  const el = document.getElementById('dmMessages');
+  if (!el) return;
+  el.innerHTML = msgs.length ? msgs.map(m => {
+    const mine = m.from_id === curUser?.id;
+    const av = m.avatar ? `<img src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(m.emoji||'👤')}</div>`;
+    return `<div style="display:flex;gap:8px;align-items:flex-end;${mine?'flex-direction:row-reverse':''}">
+      ${av}
+      <div style="max-width:70%">
+        <div style="background:${mine?'var(--accent)':'var(--card2)'};color:${mine?'#fff':'var(--text)'};padding:8px 12px;border-radius:${mine?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:14px;word-break:break-word">${esc(m.text)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:${mine?'right':'left'}">${new Date(m.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="text-align:center;color:var(--muted);padding:24px">Напиши первым!</div>';
+  el.scrollTop = el.scrollHeight;
+}
+async function sendDm() {
+  const inp = document.getElementById('dmInput');
+  const text = inp.value.trim();
+  if (!text || !dmUserId) return;
+  inp.value = '';
+  try { await api(`/dm/${dmUserId}`, { method:'POST', body:{ text } }); }
+  catch(e) { toast(e.message, 'err'); inp.value = text; }
+}
+
 let friendSearchTimer = null;
 function debouncedFriendSearch() {
   clearTimeout(friendSearchTimer);
@@ -2613,7 +2683,7 @@ async function doFriendSearch() {
 }
 async function friendSearchAdd(userId) {
   try {
-    const { status } = await friendAction('request', userId);
+    await friendAction('request', userId);
     const btn = document.getElementById(`fsBtn_${userId}`);
     if (btn) btn.innerHTML = '<span style="color:var(--green);font-size:12px">✓ Отправлено</span>';
   } catch(e) { toast(e.message, 'err'); }
@@ -2634,6 +2704,24 @@ function initFriendSockets() {
   });
   socket.on('friend:removed', () => {
     loadFriendRequestCount();
+  });
+  socket.on('dm:message', (msg) => {
+    if (document.getElementById('dmOverlay').classList.contains('open') && (msg.from_id === dmUserId || msg.to_id === dmUserId)) {
+      const el = document.getElementById('dmMessages');
+      const mine = msg.from_id === curUser?.id;
+      const av = msg.avatar ? `<img src="${esc(msg.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(msg.emoji||'👤')}</div>`;
+      el.insertAdjacentHTML('beforeend', `<div style="display:flex;gap:8px;align-items:flex-end;${mine?'flex-direction:row-reverse':''}">
+        ${av}
+        <div style="max-width:70%">
+          <div style="background:${mine?'var(--accent)':'var(--card2)'};color:${mine?'#fff':'var(--text)'};padding:8px 12px;border-radius:${mine?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:14px;word-break:break-word">${esc(msg.text)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:${mine?'right':'left'}">${new Date(msg.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+      </div>`);
+      el.scrollTop = el.scrollHeight;
+      if (!mine) api(`/dm/${msg.from_id}`); // mark as read
+    } else if (!document.getElementById('dmOverlay').classList.contains('open') && msg.from_id !== curUser?.id) {
+      toast(`💬 ${esc(msg.display_name||msg.username)}: ${esc(msg.text.slice(0,40))}`);
+    }
   });
 }
 
