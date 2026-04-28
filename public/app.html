@@ -734,9 +734,15 @@ async function sendComment() {
   const text = document.getElementById('cmField').value.trim();
   if (!text) return;
   try {
-    await api(`/profiles/${curProfile.profile.id}/comments`, { method:'POST', body:{text} });
+    const data = await api(`/profiles/${curProfile.profile.id}/comments`, { method:'POST', body:{text} });
     document.getElementById('cmField').value = '';
     document.getElementById('cmField').style.height = 'auto';
+    // Добавляем локально сразу
+    if (data.comment && !curProfile.comments.find(x => x.id === data.comment.id)) {
+      curProfile.comments.push(data.comment);
+      renderProfileSheet();
+      scrollCommentsDown();
+    }
   } catch(e) { toast(e.message, 'err'); }
 }
 
@@ -831,9 +837,16 @@ async function sendPost() {
   const text = document.getElementById('postField').value.trim();
   if (!text) return;
   try {
-    await api(`/topics/${curTopic.topic.id}/posts`, { method:'POST', body:{text} });
+    const data = await api(`/topics/${curTopic.topic.id}/posts`, { method:'POST', body:{text} });
     document.getElementById('postField').value = '';
     document.getElementById('postField').style.height = 'auto';
+    // Добавляем локально сразу
+    if (data.post && !curTopic.posts.find(x => x.id === data.post.id)) {
+      curTopic.posts.push(data.post);
+      renderTopicSheet();
+      const mb = document.getElementById('topicSheetBody');
+      if (mb) mb.scrollTop = mb.scrollHeight;
+    }
   } catch(e) { toast(e.message, 'err'); }
 }
 

@@ -6,6 +6,11 @@
 <title>ANKETA.FORUM</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="shortcut icon" href="/favicon.png">
+<link rel="apple-touch-icon" href="/favicon.png">
+<meta property="og:title" content="ANKETA.FORUM">
+<meta property="og:description" content="Анонимные анкеты и форум">
+<meta property="og:image" content="/favicon.png">
+<meta property="og:type" content="website">
 <script src="/socket.io/socket.io.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -1288,6 +1293,7 @@ async function sendComment() {
   const text = (document.getElementById('cmField')?.value||'').trim();
   if (!text && !_cmImageFile) return;
   try {
+    let newComment;
     if (_cmImageFile) {
       const fd = new FormData();
       fd.append('image', _cmImageFile);
@@ -1295,11 +1301,20 @@ async function sendComment() {
       const res = await fetch(`/api/profiles/${curProfile.profile.id}/comments/image`, { method:'POST', credentials:'include', body:fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      newComment = data.comment;
     } else {
-      await api(`/profiles/${curProfile.profile.id}/comments`, { method:'POST', body:{ text } });
+      const data = await api(`/profiles/${curProfile.profile.id}/comments`, { method:'POST', body:{ text } });
+      newComment = data.comment;
     }
     if (document.getElementById('cmField')) document.getElementById('cmField').value = '';
     clearCommentImage();
+    // Добавляем комментарий локально сразу (не ждём сокет)
+    if (newComment && !curProfile.comments.find(x => x.id === newComment.id)) {
+      curProfile.comments.push(newComment);
+      renderProfileModal();
+      const mb = document.getElementById('profileBody');
+      if (mb) mb.scrollTop = mb.scrollHeight;
+    }
   } catch (e) { toast(e.message, 'err'); }
 }
 
@@ -1567,6 +1582,7 @@ async function sendPost() {
   const text = (document.getElementById('postField')?.value||'').trim();
   if (!text && !_postImageFile) return;
   try {
+    let newPost;
     if (_postImageFile) {
       const fd = new FormData();
       fd.append('image', _postImageFile);
@@ -1574,11 +1590,20 @@ async function sendPost() {
       const res = await fetch(`/api/topics/${curTopic.topic.id}/posts/image`, { method:'POST', credentials:'include', body:fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      newPost = data.post;
     } else {
-      await api(`/topics/${curTopic.topic.id}/posts`, { method:'POST', body:{ text } });
+      const data = await api(`/topics/${curTopic.topic.id}/posts`, { method:'POST', body:{ text } });
+      newPost = data.post;
     }
     if (document.getElementById('postField')) document.getElementById('postField').value = '';
     clearPostImage();
+    // Добавляем пост локально сразу
+    if (newPost && !curTopic.posts.find(x => x.id === newPost.id)) {
+      curTopic.posts.push(newPost);
+      renderTopicModal();
+      const mb = document.getElementById('topicBody');
+      if (mb) mb.scrollTop = mb.scrollHeight;
+    }
   } catch (e) { toast(e.message, 'err'); }
 }
 
