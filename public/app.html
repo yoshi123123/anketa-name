@@ -969,30 +969,21 @@ function initSocket() {
   const token = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('token='))?.split('=')[1]||'';
   socket = io({ auth:{token}, reconnectionDelay:1000 });
 
-  socket.on('connect', () => {
-    if (curProfile) socketJoin('profile', curProfile.profile.id);
-    if (curTopic) socketJoin('topic', curTopic.topic.id);
-  });
-
   socket.on('profile:created', p => { if(!profiles.find(x=>x.id===p.id)){profiles.unshift(p);if(curPage==='home')render();} });
   socket.on('profile:updated', p => { const i=profiles.findIndex(x=>x.id===p.id); if(i>=0)profiles[i]=p; else profiles.unshift(p); if(curPage==='home')render(); if(curProfile?.profile.id===p.id){curProfile.profile=p;renderProfileSheet();} });
   socket.on('profile:deleted', ({id}) => { profiles=profiles.filter(x=>x.id!==id); if(curPage==='home')render(); if(curProfile?.profile.id===id)closeSheet('profileSheet'); });
-  socket.on('comment:new', c => { if(curProfile?.profile.id===c.profile_id&&!curProfile.comments.find(x=>x.id===c.id)){curProfile.comments.push(c);renderProfileSheet();scrollCommentsDown();} });
+  socket.on('comment:new', c => { if(curProfile && +curProfile.profile.id === +c.profileId && !curProfile.comments.find(x=>x.id===c.id)){curProfile.comments.push(c);renderProfileSheet();scrollCommentsDown();} });
   socket.on('comment:deleted', ({id}) => { if(curProfile){curProfile.comments=curProfile.comments.filter(x=>x.id!==id);renderProfileSheet();} });
   socket.on('topic:created', t => { if(!topics.find(x=>x.id===t.id)){topics.unshift(t);if(curPage==='forum')render();} });
   socket.on('topic:updated', t => { const i=topics.findIndex(x=>x.id===t.id); if(i>=0)topics[i]=t; else topics.unshift(t); if(curPage==='forum')render(); });
   socket.on('topic:deleted', ({id}) => { topics=topics.filter(x=>x.id!==id); if(curPage==='forum')render(); if(curTopic?.topic.id===id)closeSheet('topicSheet'); });
   socket.on('topic:posts_count', ({topicId,count}) => { const t=topics.find(x=>x.id===topicId); if(t){t.postsCount=count;if(curPage==='forum')render();} });
-  socket.on('post:new', p => { if(curTopic?.topic.id===p.topic_id&&!curTopic.posts.find(x=>x.id===p.id)){curTopic.posts.push(p);renderTopicSheet();} });
+  socket.on('post:new', p => { if(curTopic && +curTopic.topic.id === +p.topicId && !curTopic.posts.find(x=>x.id===p.id)){curTopic.posts.push(p);renderTopicSheet();} });
   socket.on('post:deleted', ({id}) => { if(curTopic){curTopic.posts=curTopic.posts.filter(x=>x.id!==id);renderTopicSheet();} });
   socket.on('settings:updated', upd => { if(upd.accent)document.documentElement.style.setProperty('--accent',upd.accent); });
 }
 
-function socketJoin(type, id) {
-  if (!socket) return;
-  if (socket.connected) socket.emit('join:'+type, id);
-  else socket.once('connect', () => socket.emit('join:'+type, id));
-}
+function socketJoin(type, id) { if(socket){socket.emit('join:'+type, id);} }
 
 function scrollCommentsDown() {
   const sb = document.getElementById('profileSheetBody');
