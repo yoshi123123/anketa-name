@@ -2329,7 +2329,7 @@ function initSocket() {
 
   // Новый комментарий к открытой анкете
   socket.on('comment:new', c => {
-    if (!curProfile || curProfile.profile.id !== c.profile_id) return;
+    if (!curProfile || +curProfile.profile.id !== +c.profile_id) return;
     if (curProfile.comments.find(x => x.id === c.id)) return; // дубль
     curProfile.comments.push(c);
     renderProfileModal();
@@ -2377,7 +2377,7 @@ function initSocket() {
 
   // Новый пост в открытой теме
   socket.on('post:new', p => {
-    if (!curTopic || curTopic.topic.id !== p.topic_id) return;
+    if (!curTopic || +curTopic.topic.id !== +p.topic_id) return;
     if (curTopic.posts.find(x => x.id === p.id)) return; // дубль
     curTopic.posts.push(p);
     renderTopicModal();
