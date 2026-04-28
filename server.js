@@ -50,6 +50,29 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// ── SAFE DB BACKUP BEFORE MIGRATIONS ───────────────────────────────
+// Перед любыми CREATE/ALTER TABLE делаем копию текущей SQLite БД.
+function backupDatabaseBeforeMigrations() {
+  if (process.env.AUTO_DB_BACKUP === '0') return;
+  try {
+    if (!fs.existsSync(DB_PATH)) return;
+    const backupDir = path.join(path.dirname(DB_PATH), 'backups');
+    fs.mkdirSync(backupDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const base = path.basename(DB_PATH);
+    const dst = path.join(backupDir, `.before-migration-`);
+    fs.copyFileSync(DB_PATH, dst);
+    for (const suffix of ['-wal', '-shm']) {
+      const sidecar = DB_PATH + suffix;
+      if (fs.existsSync(sidecar)) fs.copyFileSync(sidecar, dst + suffix);
+    }
+    console.log('✓ DB backup created before migrations:', dst);
+  } catch (e) {
+    console.warn('DB backup before migrations failed:', e.message);
+  }
+}
+backupDatabaseBeforeMigrations();
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
