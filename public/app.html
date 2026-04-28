@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ANKETA.FORUM</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+:root{
+  --bg:#0d0d0f; --bg2:#141416; --bg3:#1a1a1e;
+  --card:#1e1e24; --card2:#252530;
+  --border:#2d2d3a; --border2:#383848;
+  --accent:#e8632a; --accent-h:#f07540; --accent2:#5865f2;
+  --green:#3ba55d; --red:#ed4245; --yellow:#faa61a;
+  --text:#dcddde; --text2:#b9bbbe; --muted:#72767d;
+  --white:#fff; --font:'Inter',sans-serif;
+  --r:6px; --r2:12px;
+  --nav-h:56px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;overscroll-behavior:none}
+button{font-family:var(--font);cursor:pointer;border:none;outline:none}
+input,textarea,select{font-family:var(--font);outline:none}
+a{color:var(--accent);text-decoration:none}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── LAYOUT ── */
+#app{display:flex;flex-direction:column;height:100%}
+#pageHeader{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#pageHeaderTitle{font-size:16px;font-weight:700;color:var(--white);display:flex;align-items:center;gap:8px}
+#pageHeaderRight{display:flex;gap:6px;align-items:center}
+#scrollArea{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(var(--nav-h) + var(--safe-bottom) + 12px)}
+#bottomNav{position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);display:flex;padding-bottom:var(--safe-bottom);z-index:100}
+.bnav{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:var(--nav-h);background:none;border:none;color:var(--muted);font-size:10px;font-weight:600;letter-spacing:.3px;transition:color .15s;padding:0}
+.bnav .ico{font-size:20px;line-height:1}
+.bnav.active{color:var(--accent)}
+
+/* ── SEARCH ── */
+.search-wrap{position:relative;margin-bottom:12px}
+.search-wrap input{width:100%;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);color:var(--text);padding:10px 14px 10px 38px;font-size:14px}
+.search-wrap input::placeholder{color:var(--muted)}
+.search-wrap input:focus{border-color:var(--accent)}
+.search-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none}
+
+/* ── CARDS ── */
+.cards-grid{display:flex;flex-direction:column;gap:10px}
+.pcard{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;position:relative;transition:background .12s}
+.pcard:active{background:var(--card2)}
+.pcard-top{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}
+.pcard-av{width:44px;height:44px;border-radius:50%;flex-shrink:0;font-size:20px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pcard-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.pcard-info{flex:1;min-width:0}
+.pcard-name{font-weight:700;font-size:14px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px}
+.pcard-meta{font-size:11px;color:var(--muted);margin-bottom:4px}
+.pcard-tags{display:flex;gap:4px;flex-wrap:wrap}
+.tag{font-size:10px;padding:1px 7px;border-radius:3px;background:var(--card2);color:var(--text2);border:1px solid var(--border)}
+.pcard-bio{font-size:12px;color:var(--text2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pcard-pin{position:absolute;top:10px;right:10px;font-size:12px;color:var(--yellow)}
+.pcard-hidden{opacity:.5;filter:grayscale(.3)}
+
+/* ── THREAD ── */
+.thread-list{display:flex;flex-direction:column;gap:6px}
+.thread-row{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;display:flex;gap:10px;align-items:center;transition:background .12s}
+.thread-row:active{background:var(--card2)}
+.thread-ico{width:36px;height:36px;border-radius:var(--r);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.thread-info{flex:1;min-width:0}
+.thread-title{font-weight:600;font-size:13px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.thread-meta{font-size:11px;color:var(--muted)}
+.thread-cnt{font-size:11px;color:var(--muted);flex-shrink:0}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:var(--r2);font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .15s;justify-content:center}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:active{background:var(--accent-h)}
+.btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:active{background:var(--border)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-block{width:100%}
+.btn-sm{padding:7px 14px;font-size:13px}
+
+/* ── FORMS ── */
+.fgroup{margin-bottom:14px}
+.flabel{display:block;font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px}
+.finput,.ftextarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);color:var(--text);padding:12px 14px;font-size:16px;transition:border-color .15s}
+.finput:focus,.ftextarea:focus{border-color:var(--accent)}
+.finput::placeholder,.ftextarea::placeholder{color:var(--muted)}
+.ftextarea{resize:none;min-height:100px;line-height:1.6}
+.ferr{font-size:12px;color:var(--red);min-height:16px;margin-bottom:8px}
+
+/* ── SHEET MODAL ── */
+.sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;flex-direction:column;justify-content:flex-end;opacity:0;pointer-events:none;transition:opacity .25s}
+.sheet-overlay.open{opacity:1;pointer-events:all}
+.sheet{background:var(--bg2);border-radius:20px 20px 0 0;max-height:92vh;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.sheet-overlay.open .sheet{transform:translateY(0)}
+.sheet-handle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:10px auto 0}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.sheet-title{font-size:16px;font-weight:700;color:var(--white)}
+.sheet-close{width:28px;height:28px;border-radius:50%;background:var(--card2);border:1px solid var(--border);color:var(--text2);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sheet-body{overflow-y:auto;padding:16px 18px;padding-bottom:calc(var(--safe-bottom) + 16px);-webkit-overflow-scrolling:touch}
+
+/* ── PROFILE SHEET ── */
+.profile-banner{width:100%;height:120px;object-fit:cover;border-radius:16px 16px 0 0}
+.profile-av-wrap{padding:0 16px}
+.profile-av{width:64px;height:64px;border-radius:50%;margin-top:-32px;border:3px solid var(--bg2);background:var(--card2);font-size:26px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.profile-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.profile-name{font-size:18px;font-weight:700;color:var(--white)}
+.profile-sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+.about-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px;font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:12px}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.photo-thumb{aspect-ratio:1;border-radius:var(--r);overflow:hidden;background:var(--bg3)}
+.photo-thumb img{width:100%;height:100%;object-fit:cover}
+.section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin:14px 0 8px;display:flex;align-items:center;gap:6px}
+
+/* ── COMMENTS ── */
+.cm-item{display:flex;gap:8px;margin-bottom:10px}
+.cm-av{width:28px;height:28px;border-radius:50%;background:var(--card2);font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+.cm-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.cm-bubble{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:0 var(--r2) var(--r2) var(--r2);padding:8px 12px}
+.cm-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.cm-name{font-size:12px;font-weight:700;color:var(--white);cursor:pointer}
+.cm-name:active{color:var(--accent)}
+.cm-time{font-size:11px;color:var(--muted)}
+.cm-text{font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.cm-img{max-width:100%;border-radius:var(--r);margin-top:6px;cursor:pointer}
+.cm-del{font-size:11px;color:var(--red);background:none;border:none;margin-top:4px;padding:0;cursor:pointer}
+.comment-input{display:flex;gap:8px;align-items:flex-end;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+.comment-field-wrap{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;transition:border-color .15s}
+.comment-field-wrap:focus-within{border-color:var(--accent)}
+.comment-field{width:100%;background:transparent;border:none;color:var(--text);padding:10px 12px;font-size:16px;resize:none;min-height:42px;max-height:120px;line-height:1.5;font-family:var(--font)}
+.comment-send{width:38px;height:38px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-bottom:2px}
+
+/* ── TOPIC SHEET ── */
+.topic-head-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:10px}
+.topic-title-big{font-size:17px;font-weight:700;color:var(--white);margin-bottom:6px}
+.post-item{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:12px;margin-bottom:8px}
+.post-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.post-av{width:28px;height:28px;border-radius:50%;background:var(--card2);font-size:13px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.post-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.post-author{font-size:12px;font-weight:700;color:var(--white);cursor:pointer}
+.post-time{font-size:11px;color:var(--muted)}
+.post-text{font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.post-img{max-width:100%;border-radius:var(--r);margin-top:8px;cursor:pointer}
+
+/* ── USER PROFILE ── */
+.uprofile-banner{width:100%;height:100px;object-fit:cover;border-radius:16px 16px 0 0}
+.uprofile-av{width:56px;height:56px;border-radius:50%;margin-top:-28px;border:3px solid var(--bg2);background:var(--card2);font-size:22px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.uprofile-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.ustat{flex:1;text-align:center}
+.ustat-n{font-size:18px;font-weight:700;color:var(--white)}
+.ustat-l{font-size:10px;color:var(--muted);text-transform:uppercase}
+.social-chip{padding:4px 10px;border-radius:var(--r);background:var(--card2);border:1px solid var(--border);font-size:12px;color:var(--text2);display:inline-flex;align-items:center;gap:4px;margin-right:6px;margin-bottom:6px;text-decoration:none}
+
+/* ── AUTH ── */
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:12px}
+.auth-tabs{display:flex;border-bottom:1px solid var(--border);margin:-20px -20px 16px}
+.atab{flex:1;padding:12px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.atab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:calc(var(--nav-h) + var(--safe-bottom) + 10px);left:50%;transform:translateX(-50%) translateY(10px);background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:13px;padding:10px 20px;border-radius:100px;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:var(--red)}
+.toast.warn{border-color:var(--yellow);color:var(--yellow)}
+
+/* ── LIGHTBOX ── */
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:500;display:flex;align-items:center;justify-content:center}
+.lightbox img{max-width:100%;max-height:100%;object-fit:contain}
+
+/* ── ROLE CHIPS ── */
+.role-chip{font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700}
+.role-owner,.role-admin{background:#ed424520;color:var(--red);border:1px solid #ed424540}
+.role-mod{background:#faa61a20;color:var(--yellow);border:1px solid #faa61a40}
+.role-user{background:#5865f220;color:var(--accent2);border:1px solid #5865f240}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:48px 16px;color:var(--muted)}
+.empty .ico{font-size:40px;margin-bottom:10px;opacity:.5}
+.empty h3{font-size:15px;color:var(--text);margin-bottom:4px}
+.empty p{font-size:13px}
+
+/* ── SPINNER ── */
+.spinner{display:flex;align-items:center;justify-content:center;padding:40px}
+.spinner::after{content:'';width:28px;height:28px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── TG THEME ── */
+@media(prefers-color-scheme:light){
+  :root{
+    --bg:#f0f2f5;--bg2:#ffffff;--bg3:#f0f2f5;
+    --card:#ffffff;--card2:#f0f2f5;
+    --border:#e0e0e8;--border2:#d0d0dc;
+    --text:#2c2c2e;--text2:#6b6b7a;--muted:#9a9aaa;
+    --white:#111;
+  }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="pageHeader">
+    <div id="pageHeaderTitle">
+      <span id="hdrIcon">📋</span>
+      <span id="hdrText">Анкеты</span>
+    </div>
+    <div id="pageHeaderRight"></div>
+  </div>
+
+  <div id="scrollArea">
+    <div id="mainContent"><div class="spinner"></div></div>
+  </div>
+
+  <nav id="bottomNav">
+    <button class="bnav active" id="bnavHome" onclick="nav('home')"><span class="ico">🏠</span>Анкеты</button>
+    <button class="bnav" id="bnavForum" onclick="nav('forum')"><span class="ico">💬</span>Форум</button>
+    <button class="bnav" id="bnavCreate" onclick="requireAuth(()=>nav('create'))"><span class="ico">➕</span>Создать</button>
+    <button class="bnav" id="bnavMe" onclick="onMeBtn()"><span class="ico" id="bnavMeIco">👤</span><span id="bnavMeLbl">Войти</span></button>
+  </nav>
+</div>
+
+<!-- PROFILE SHEET -->
+<div class="sheet-overlay" id="profileSheet">
+  <div class="sheet" id="profileSheetInner">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">Анкета</div>
+      <button class="sheet-close" onclick="closeSheet('profileSheet')">✕</button>
+    </div>
+    <div class="sheet-body" id="profileSheetBody"></div>
+    <div class="comment-input" id="commentInputArea" style="display:none">
+      <div class="cm-av" id="cmAvatar">👤</div>
+      <div class="comment-field-wrap">
+        <textarea class="comment-field" id="cmField" placeholder="Комментарий..." rows="1"
+          oninput="autoResize(this)"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendComment()}"></textarea>
+      </div>
+      <button class="comment-send" onclick="sendComment()">↑</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOPIC SHEET -->
+<div class="sheet-overlay" id="topicSheet">
+  <div class="sheet" id="topicSheetInner">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">Тема</div>
+      <button class="sheet-close" onclick="closeSheet('topicSheet')">✕</button>
+    </div>
+    <div class="sheet-body" id="topicSheetBody"></div>
+    <div class="comment-input" id="postInputArea" style="display:none">
+      <div class="cm-av" id="postAvatar">👤</div>
+      <div class="comment-field-wrap">
+        <textarea class="comment-field" id="postField" placeholder="Ответить..." rows="1"
+          oninput="autoResize(this)"></textarea>
+      </div>
+      <button class="comment-send" onclick="sendPost()">↑</button>
+    </div>
+  </div>
+</div>
+
+<!-- USER PROFILE SHEET -->
+<div class="sheet-overlay" id="userSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title" id="userSheetTitle">Профиль</div>
+      <button class="sheet-close" onclick="closeSheet('userSheet')">✕</button>
+    </div>
+    <div class="sheet-body" id="userSheetBody"></div>
+  </div>
+</div>
+
+<!-- AUTH SHEET -->
+<div class="sheet-overlay" id="authSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">Вход</div>
+      <button class="sheet-close" onclick="closeSheet('authSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="auth-tabs">
+        <button class="atab active" id="atLogin" onclick="authTab('login')">Войти</button>
+        <button class="atab" id="atReg" onclick="authTab('reg')">Регистрация</button>
+      </div>
+      <div id="apLogin">
+        <div class="ferr" id="loginErr"></div>
+        <div class="fgroup"><label class="flabel">Логин</label><input class="finput" id="liUser" placeholder="логин" autocomplete="username"></div>
+        <div class="fgroup"><label class="flabel">Пароль</label><input class="finput" id="liPass" type="password" placeholder="••••••" autocomplete="current-password"></div>
+        <button class="btn btn-primary btn-block" onclick="doLogin()">Войти</button>
+      </div>
+      <div id="apReg" style="display:none">
+        <div class="ferr" id="regErr"></div>
+        <div class="fgroup"><label class="flabel">Логин (3-20 символов)</label><input class="finput" id="rUser" placeholder="my_login" autocomplete="username"></div>
+        <div class="fgroup"><label class="flabel">Имя</label><input class="finput" id="rDisp" placeholder="Отображаемое имя" autocomplete="name"></div>
+        <div class="fgroup"><label class="flabel">Пароль</label><input class="finput" id="rPass" type="password" placeholder="••••••" autocomplete="new-password"></div>
+        <div class="fgroup"><label class="flabel">Повтор пароля</label><input class="finput" id="rPass2" type="password" placeholder="••••••"></div>
+        <button class="btn btn-primary btn-block" onclick="doRegister()">Создать аккаунт</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  TELEGRAM MINI APP INIT
+// ═══════════════════════════════════════════════════════════════
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor('#0d0d0f');
+  tg.setBackgroundColor('#0d0d0f');
+  // Адаптируем цвет акцента под тему Telegram если есть
+  if (tg.themeParams?.button_color) {
+    // Оставляем наш фирменный оранжевый
+  }
+}
+
+// Обработка кнопки Back в Telegram
+if (tg) {
+  tg.BackButton.onClick(() => {
+    if (document.querySelector('.sheet-overlay.open')) {
+      document.querySelectorAll('.sheet-overlay.open').forEach(el => {
+        el.classList.remove('open');
+      });
+      tg.BackButton.hide();
+      return;
+    }
+    if (curPage !== 'home') { nav('home'); return; }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let curUser = null;
+let curPage = 'home';
+let profiles = [];
+let topics = [];
+let curProfile = null;
+let curTopic = null;
+let socket = null;
+
+const ROLE_LABELS = { owner:'👑', admin:'🔴', moderator:'🟡', user:'👤' };
+const ROLE_RANK = { user:0, moderator:1, admin:2, owner:3 };
+const rolerank = u => ROLE_RANK[u?.role] ?? 0;
+const isOwner = () => curUser?.role === 'owner';
+const isAdmin = () => rolerank(curUser) >= 2;
+const isMod   = () => rolerank(curUser) >= 1;
+
+// ═══════════════════════════════════════════════════════════════
+//  API
+// ═══════════════════════════════════════════════════════════════
+async function api(path, opts={}) {
+  const init = { method:opts.method||'GET', credentials:'include', headers:{'Content-Type':'application/json'} };
+  if (opts.body) init.body = JSON.stringify(opts.body);
+  const res = await fetch('/api'+path, init);
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data.error || 'Ошибка '+res.status);
+  return data;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function timeAgo(ts) {
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s<60) return 'только что';
+  if (s<3600) return Math.floor(s/60)+' мин';
+  if (s<86400) return Math.floor(s/3600)+' ч';
+  if (s<30*86400) return Math.floor(s/86400)+' дн';
+  return new Date(ts).toLocaleDateString('ru-RU');
+}
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show '+type;
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>el.className='toast '+type, 2400);
+}
+function roleChip(role) {
+  const cls = role==='owner'||role==='admin'?'role-owner':role==='moderator'?'role-mod':'role-user';
+  return `<span class="role-chip ${cls}">${ROLE_LABELS[role]||role} ${role}</span>`;
+}
+function requireAuth(fn) {
+  if (curUser) return fn();
+  openSheet('authSheet');
+  toast('Сначала войди', 'warn');
+}
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120)+'px';
+}
+function openLightbox(src) {
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<img src="${esc(src)}">`;
+  lb.onclick = () => lb.remove();
+  document.body.appendChild(lb);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SHEETS
+// ═══════════════════════════════════════════════════════════════
+function openSheet(id) {
+  document.getElementById(id).classList.add('open');
+  if (tg) tg.BackButton.show();
+}
+function closeSheet(id) {
+  document.getElementById(id).classList.remove('open');
+  const anyOpen = document.querySelector('.sheet-overlay.open');
+  if (!anyOpen && tg) tg.BackButton.hide();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════════════════════
+function authTab(t) {
+  document.getElementById('atLogin').classList.toggle('active', t==='login');
+  document.getElementById('atReg').classList.toggle('active', t==='reg');
+  document.getElementById('apLogin').style.display = t==='login'?'':'none';
+  document.getElementById('apReg').style.display = t==='reg'?'':'none';
+}
+
+async function doLogin() {
+  const username = document.getElementById('liUser').value.trim();
+  const password = document.getElementById('liPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = '';
+  if (!username||!password) { errEl.textContent='Заполни оба поля'; return; }
+  try {
+    const { user } = await api('/auth/login', { method:'POST', body:{username,password} });
+    curUser = user;
+    closeSheet('authSheet');
+    toast('Добро пожаловать, '+user.displayName, 'ok');
+    renderHeader();
+    await loadAll();
+  } catch(e) { errEl.textContent = e.message; }
+}
+
+async function doRegister() {
+  const username = document.getElementById('rUser').value.trim();
+  const displayName = document.getElementById('rDisp').value.trim() || username;
+  const password = document.getElementById('rPass').value;
+  const password2 = document.getElementById('rPass2').value;
+  const errEl = document.getElementById('regErr');
+  errEl.textContent = '';
+  if (!username||!password) { errEl.textContent='Заполни обязательные поля'; return; }
+  if (password!==password2) { errEl.textContent='Пароли не совпадают'; return; }
+  try {
+    const { user } = await api('/auth/register', { method:'POST', body:{username,password,displayName} });
+    curUser = user;
+    closeSheet('authSheet');
+    toast('Аккаунт создан', 'ok');
+    renderHeader();
+    await loadAll();
+  } catch(e) { errEl.textContent = e.message; }
+}
+
+async function doLogout() {
+  try { await api('/auth/logout', { method:'POST' }); } catch {}
+  curUser = null;
+  renderHeader();
+  render();
+  toast('Вы вышли', 'ok');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HEADER & NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+const ICONS = { home:'📋', forum:'💬', create:'➕', me:'👤', settings:'⚙' };
+const TITLES = { home:'Анкеты', forum:'Форум', create:'Новая анкета' };
+
+function renderHeader() {
+  const icon = ICONS[curPage] || '📋';
+  const title = TITLES[curPage] || 'ANKETA.FORUM';
+  document.getElementById('hdrIcon').textContent = icon;
+  document.getElementById('hdrText').textContent = title;
+
+  // Update bottom nav
+  ['Home','Forum','Create'].forEach(p => {
+    document.getElementById('bnav'+p)?.classList.toggle('active', curPage===p.toLowerCase()||(p==='Home'&&curPage==='create'));
+  });
+
+  // Me button
+  const ico = document.getElementById('bnavMeIco');
+  const lbl = document.getElementById('bnavMeLbl');
+  if (curUser) {
+    ico.textContent = curUser.avatar ? '' : (curUser.emoji||'👤');
+    if (curUser.avatar && ico) {
+      ico.innerHTML = `<img src="${esc(curUser.avatar)}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`;
+    }
+    lbl.textContent = curUser.displayName.slice(0,8);
+  } else {
+    ico.textContent = '👤';
+    lbl.textContent = 'Войти';
+  }
+
+  // Right header button
+  const right = document.getElementById('pageHeaderRight');
+  if (curUser && isAdmin()) {
+    right.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="nav('admin')" style="font-size:12px">⚙ Панель</button>`;
+  } else if (curUser) {
+    right.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="openUserProfile(${curUser.id})" style="font-size:12px">👤 Профиль</button>`;
+  } else {
+    right.innerHTML = `<button class="btn btn-primary btn-sm" onclick="openSheet('authSheet')">Войти</button>`;
+  }
+}
+
+function onMeBtn() {
+  if (curUser) openUserProfile(curUser.id);
+  else openSheet('authSheet');
+}
+
+function nav(page) {
+  curPage = page;
+  document.getElementById('scrollArea').scrollTop = 0;
+  renderHeader();
+  render();
+  if (tg) tg.BackButton.hide();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER PAGES
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  const m = document.getElementById('mainContent');
+  if (curPage==='home') m.innerHTML = renderHome();
+  else if (curPage==='forum') m.innerHTML = renderForum();
+  else if (curPage==='create') m.innerHTML = renderCreate();
+  else if (curPage==='admin') m.innerHTML = renderAdmin();
+  else m.innerHTML = renderHome();
+}
+
+function renderHome() {
+  const q = (document.getElementById('homeSearch')?.value||'').toLowerCase();
+  let list = profiles.slice();
+  if (q) list = list.filter(p=>p.name.toLowerCase().includes(q)||(p.bio||'').toLowerCase().includes(q)||(p.tags||[]).some(t=>t.toLowerCase().includes(q)));
+  list.sort((a,b)=>(b.pinned-a.pinned)||(b.createdAt-a.createdAt));
+  const cards = list.length ? list.map(p=>{
+    const av = p.avatar
+      ? `<div class="pcard-av" style="background:${esc(p.color)}40"><img src="${esc(p.avatar)}" loading="lazy"></div>`
+      : `<div class="pcard-av" style="background:${esc(p.color)}40">${esc(p.emoji||'👤')}</div>`;
+    return `<div class="pcard${p.hidden?' pcard-hidden':''}" onclick="openProfile(${p.id})">
+      ${p.pinned?'<div class="pcard-pin">📌</div>':''}
+      <div class="pcard-top">${av}
+        <div class="pcard-info">
+          <div class="pcard-name">${esc(p.name)}</div>
+          <div class="pcard-meta">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
+          <div class="pcard-tags">${(p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+        </div>
+      </div>
+      <div class="pcard-bio">${esc(p.bio||'')}</div>
+    </div>`;
+  }).join('') : `<div class="empty"><div class="ico">📋</div><h3>Анкет пока нет</h3><p>${curUser?'Нажми ➕ чтобы создать':'Войди чтобы создать первую'}</p></div>`;
+
+  return `<div class="search-wrap"><span class="search-ico">🔍</span>
+    <input placeholder="Поиск анкет..." oninput="render()" id="homeSearch" autocomplete="off"></div>
+    <div class="cards-grid">${cards}</div>`;
+}
+
+function renderForum() {
+  const q = (document.getElementById('forumSearch')?.value||'').toLowerCase();
+  let list = topics.slice();
+  if (q) list = list.filter(t=>t.title.toLowerCase().includes(q)||t.body.toLowerCase().includes(q));
+  list.sort((a,b)=>(b.pinned-a.pinned)||(b.createdAt-a.createdAt));
+  const rows = list.length ? list.map(t=>`
+    <div class="thread-row" onclick="openTopic(${t.id})">
+      <div class="thread-ico">${t.pinned?'📌':'💬'}</div>
+      <div class="thread-info">
+        <div class="thread-title">${esc(t.title)}</div>
+        <div class="thread-meta">@${esc(t.author)} · ${timeAgo(t.createdAt)}</div>
+      </div>
+      <div class="thread-cnt">💬 ${t.postsCount||0}</div>
+    </div>`) .join('')
+  : `<div class="empty"><div class="ico">💬</div><h3>Тем пока нет</h3><p>${curUser?'Нажми ➕ чтобы создать тему':'Войди чтобы участвовать'}</p></div>`;
+
+  return `<div class="search-wrap"><span class="search-ico">🔍</span>
+    <input placeholder="Поиск тем..." oninput="render()" id="forumSearch" autocomplete="off"></div>
+    <div class="thread-list">${rows}</div>`;
+}
+
+function renderCreate() {
+  if (!curUser) { setTimeout(()=>openSheet('authSheet'),0); return '<div class="spinner"></div>'; }
+  return `<div class="auth-card">
+    <div class="ferr" id="cpErr"></div>
+    <div class="fgroup"><label class="flabel">Имя *</label><input class="finput" id="cpName" maxlength="50" placeholder="Как тебя зовут?"></div>
+    <div class="fgroup"><label class="flabel">Возраст</label><input class="finput" id="cpAge" type="number" min="0" max="120" placeholder="Необязательно"></div>
+    <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="cpBio" maxlength="2000" placeholder="Расскажи о себе..."></textarea></div>
+    <div class="fgroup"><label class="flabel">Теги (через запятую)</label><input class="finput" id="cpTags" placeholder="музыка, кино, спорт"></div>
+    <div class="fgroup"><label class="flabel">Эмодзи</label><input class="finput" id="cpEmoji" maxlength="4" placeholder="👤" value="👤"></div>
+    <div class="fgroup"><label class="flabel">Цвет</label><input type="color" id="cpColor" value="#e8632a" style="width:100%;height:44px;border:1px solid var(--border);border-radius:var(--r2);background:var(--bg3);cursor:pointer"></div>
+    <button class="btn btn-primary btn-block" onclick="submitCreate()">Опубликовать анкету</button>
+  </div>`;
+}
+
+async function submitCreate() {
+  const name = document.getElementById('cpName').value.trim();
+  const errEl = document.getElementById('cpErr');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Имя обязательно'; return; }
+  try {
+    await api('/profiles', { method:'POST', body:{
+      name,
+      age: +document.getElementById('cpAge').value || null,
+      bio: document.getElementById('cpBio').value.trim(),
+      tags: document.getElementById('cpTags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      emoji: document.getElementById('cpEmoji').value || '👤',
+      color: document.getElementById('cpColor').value
+    }});
+    toast('Анкета опубликована!', 'ok');
+    await loadProfiles();
+    nav('home');
+  } catch(e) { document.getElementById('cpErr').textContent = e.message; }
+}
+
+function renderAdmin() {
+  if (!isMod()) return '<div class="empty"><h3>Нет доступа</h3></div>';
+  return `<div style="display:flex;flex-direction:column;gap:10px">
+    <div class="auth-card">
+      <div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:10px">⚡ Быстрые действия</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="loadAll();toast('Обновлено','ok')">🔄 Обновить</button>
+        ${isAdmin()?`<button class="btn btn-secondary btn-sm" onclick="openSiteEditor()">🛠 Редактор сайта</button>`:''}
+      </div>
+    </div>
+    <div id="adminStats" class="auth-card"><div class="spinner"></div></div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PROFILE SHEET
+// ═══════════════════════════════════════════════════════════════
+async function openProfile(id) {
+  try {
+    const data = await api('/profiles/'+id);
+    curProfile = data;
+    renderProfileSheet();
+    openSheet('profileSheet');
+    socketJoin('profile', id);
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function renderProfileSheet() {
+  if (!curProfile) return;
+  const p = curProfile.profile;
+  const isOwn = curUser && p.ownerId===curUser.id;
+  const canEdit = isOwn || isMod();
+
+  const bannerHtml = p.avatar
+    ? `<img src="${esc(p.avatar)}" class="profile-banner" loading="lazy">`
+    : `<div style="width:100%;height:100px;background:${esc(p.color)}33;border-radius:16px 16px 0 0"></div>`;
+
+  const avHtml = p.avatar
+    ? `<img src="${esc(p.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    : `<span style="font-size:26px">${esc(p.emoji||'👤')}</span>`;
+
+  const photos = p.photos||[];
+  const photoSection = photos.length ? `
+    <div class="section-title">🖼 Фото (${photos.length})</div>
+    <div class="photo-grid">
+      ${photos.map(url=>`<div class="photo-thumb" onclick="openLightbox('${esc(url)}')"><img src="${esc(url)}" loading="lazy"></div>`).join('')}
+    </div>` : '';
+
+  const comments = (curProfile.comments||[]).map(c=>{
+    const canDel = curUser && (c.user_id===curUser.id || isMod());
+    const cmAv = c.user_avatar
+      ? `<div class="cm-av"><img src="${esc(c.user_avatar)}"></div>`
+      : `<div class="cm-av">${c.user_emoji||'👤'}</div>`;
+    return `<div class="cm-item">${cmAv}
+      <div class="cm-bubble">
+        <div class="cm-head">
+          <span class="cm-name" onclick="openUserProfile(${c.user_id})">${esc(c.author)}</span>
+          <span class="cm-time">${timeAgo(c.created_at)}</span>
+        </div>
+        ${c.text?`<div class="cm-text">${esc(c.text)}</div>`:''}
+        ${c.image?`<img src="${esc(c.image)}" class="cm-img" onclick="openLightbox('${esc(c.image)}')">`:''}
+        ${canDel?`<button class="cm-del" onclick="deleteComment(${c.id})">Удалить</button>`:''}
+      </div>
+    </div>`;
+  }).join('') || `<div style="color:var(--muted);font-size:12px;padding:8px 0">Комментариев пока нет</div>`;
+
+  const modBar = canEdit ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+    ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="togglePin(${p.id})">${p.pinned?'Открепить':'📌 Закрепить'}</button>`:''}
+    ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="toggleHide(${p.id})">${p.hidden?'👁 Показать':'🙈 Скрыть'}</button>`:''}
+    ${canEdit?`<button class="btn btn-danger btn-sm" onclick="deleteProfile(${p.id})">🗑 Удалить</button>`:''}
+  </div>` : '';
+
+  document.getElementById('profileSheetBody').innerHTML = `
+    ${bannerHtml}
+    <div class="profile-av-wrap">
+      <div class="profile-av">${avHtml}</div>
+    </div>
+    <div style="padding:0 2px 14px">
+      ${modBar}
+      <div class="profile-name">${esc(p.name)}</div>
+      <div class="profile-sub">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}${p.hidden?' · 🙈 Скрыта':''}</div>
+      <div class="pcard-tags" style="margin-bottom:10px">${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+      <div class="section-title">📝 О себе</div>
+      <div class="about-box">${esc(p.bio||'Нет описания')}</div>
+      ${photoSection}
+      <div class="section-title">💬 Комментарии (${(curProfile.comments||[]).length})</div>
+      ${comments}
+      <div style="height:10px"></div>
+    </div>`;
+
+  // Показываем поле ввода если залогинен
+  const inputArea = document.getElementById('commentInputArea');
+  if (curUser) {
+    inputArea.style.display = 'flex';
+    const cmAv = document.getElementById('cmAvatar');
+    cmAv.innerHTML = curUser.avatar
+      ? `<img src="${esc(curUser.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      : (curUser.emoji||'👤');
+  } else {
+    inputArea.style.display = 'none';
+  }
+}
+
+async function sendComment() {
+  if (!curProfile || !curUser) return;
+  const text = document.getElementById('cmField').value.trim();
+  if (!text) return;
+  try {
+    await api(`/profiles/${curProfile.profile.id}/comments`, { method:'POST', body:{text} });
+    document.getElementById('cmField').value = '';
+    document.getElementById('cmField').style.height = 'auto';
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function deleteComment(id) {
+  try {
+    await api('/comments/'+id, { method:'DELETE' });
+    curProfile.comments = curProfile.comments.filter(x=>x.id!==id);
+    renderProfileSheet();
+    toast('Удалено', 'ok');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function togglePin(id) {
+  const p = profiles.find(x=>x.id===id)||curProfile?.profile;
+  try { await api('/profiles/'+id, { method:'PATCH', body:{pinned:!p.pinned} }); await loadProfiles(); render(); if(curProfile?.profile.id===id){const d=await api('/profiles/'+id);curProfile=d;renderProfileSheet();} } catch(e) { toast(e.message,'err'); }
+}
+async function toggleHide(id) {
+  const p = profiles.find(x=>x.id===id)||curProfile?.profile;
+  try { await api('/profiles/'+id, { method:'PATCH', body:{hidden:!p.hidden} }); await loadProfiles(); render(); if(curProfile?.profile.id===id){const d=await api('/profiles/'+id);curProfile=d;renderProfileSheet();} } catch(e) { toast(e.message,'err'); }
+}
+function deleteProfile(id) {
+  const p = profiles.find(x=>x.id===id)||curProfile?.profile;
+  if (!confirm(`Удалить анкету «${p?.name}»?`)) return;
+  api('/profiles/'+id,{method:'DELETE'}).then(()=>{toast('Удалено','ok');closeSheet('profileSheet');loadProfiles().then(()=>render());}).catch(e=>toast(e.message,'err'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TOPIC SHEET
+// ═══════════════════════════════════════════════════════════════
+async function openTopic(id) {
+  try {
+    const data = await api('/topics/'+id);
+    curTopic = data;
+    renderTopicSheet();
+    openSheet('topicSheet');
+    socketJoin('topic', id);
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function renderTopicSheet() {
+  if (!curTopic) return;
+  const t = curTopic.topic;
+  const isOwn = curUser && t.userId===curUser.id;
+  const canDel = isOwn || isMod();
+
+  const modBar = canDel ? `<div style="display:flex;gap:6px;margin-top:8px">
+    ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="togglePinTopic(${t.id})">${t.pinned?'Открепить':'📌 Закрепить'}</button>`:''}
+    <button class="btn btn-danger btn-sm" onclick="deleteTopic(${t.id})">🗑 Удалить</button>
+  </div>` : '';
+
+  const posts = (curTopic.posts||[]).map(p=>{
+    const canDelPost = curUser && (p.user_id===curUser.id||isMod());
+    const av = p.user_avatar
+      ? `<div class="post-av"><img src="${esc(p.user_avatar)}"></div>`
+      : `<div class="post-av">${'👤'}</div>`;
+    return `<div class="post-item">${av}
+      <div class="post-head">
+        <span class="post-author" onclick="openUserProfile(${p.user_id})">${esc(p.author)}</span>
+        <span class="post-time">${timeAgo(p.created_at)}</span>
+        ${canDelPost?`<button class="cm-del" onclick="deletePost(${p.id})" style="margin-left:auto">🗑</button>`:''}
+      </div>
+      ${p.text?`<div class="post-text">${esc(p.text)}</div>`:''}
+      ${p.image?`<img src="${esc(p.image)}" class="post-img" onclick="openLightbox('${esc(p.image)}')">`:''}
+    </div>`;
+  }).join('') || `<div style="color:var(--muted);font-size:12px;padding:8px 0">Ответов пока нет</div>`;
+
+  document.getElementById('topicSheetBody').innerHTML = `
+    <div class="topic-head-card">
+      <div class="topic-title-big">${t.pinned?'📌 ':''}${esc(t.title)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">@${esc(t.author)} · ${timeAgo(t.createdAt)}</div>
+      <div style="font-size:14px;color:var(--text2);line-height:1.6;white-space:pre-wrap">${esc(t.body)}</div>
+      ${modBar}
+    </div>
+    <div class="section-title">💬 Ответы (${(curTopic.posts||[]).length})</div>
+    ${posts}
+    <div style="height:10px"></div>`;
+
+  const pa = document.getElementById('postInputArea');
+  if (curUser) {
+    pa.style.display = 'flex';
+    const pAv = document.getElementById('postAvatar');
+    pAv.innerHTML = curUser.avatar
+      ? `<img src="${esc(curUser.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      : (curUser.emoji||'👤');
+  } else {
+    pa.style.display = 'none';
+  }
+}
+
+async function sendPost() {
+  if (!curTopic||!curUser) return;
+  const text = document.getElementById('postField').value.trim();
+  if (!text) return;
+  try {
+    await api(`/topics/${curTopic.topic.id}/posts`, { method:'POST', body:{text} });
+    document.getElementById('postField').value = '';
+    document.getElementById('postField').style.height = 'auto';
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function deletePost(id) {
+  try {
+    await api('/posts/'+id, {method:'DELETE'});
+    curTopic.posts = curTopic.posts.filter(x=>x.id!==id);
+    renderTopicSheet();
+  } catch(e) { toast(e.message,'err'); }
+}
+
+async function togglePinTopic(id) {
+  const t = topics.find(x=>x.id===id)||curTopic?.topic;
+  try { await api('/topics/'+id,{method:'PATCH',body:{pinned:!t.pinned}}); await loadTopics(); render(); if(curTopic?.topic.id===id){const d=await api('/topics/'+id);curTopic=d;renderTopicSheet();} } catch(e){toast(e.message,'err');}
+}
+function deleteTopic(id) {
+  const t = topics.find(x=>x.id===id)||curTopic?.topic;
+  if (!confirm(`Удалить тему «${t?.title}»?`)) return;
+  api('/topics/'+id,{method:'DELETE'}).then(()=>{toast('Удалено','ok');closeSheet('topicSheet');loadTopics().then(()=>render());}).catch(e=>toast(e.message,'err'));
+}
+
+// Создать тему через мини-апп
+function openCreateTopic() {
+  if (!curUser) return openSheet('authSheet');
+  const body = `<div class="ferr" id="ctErr"></div>
+    <div class="fgroup"><label class="flabel">Заголовок</label><input class="finput" id="ctTitle" maxlength="120" placeholder="О чём тема?"></div>
+    <div class="fgroup"><label class="flabel">Текст</label><textarea class="ftextarea" id="ctBody" maxlength="5000" placeholder="Подробнее..."></textarea></div>
+    <button class="btn btn-primary btn-block" onclick="submitTopic()">Опубликовать</button>`;
+  document.getElementById('topicSheetBody').innerHTML = body;
+  document.getElementById('postInputArea').style.display = 'none';
+  document.querySelector('#topicSheet .sheet-title').textContent = 'Новая тема';
+  openSheet('topicSheet');
+}
+
+async function submitTopic() {
+  const title = document.getElementById('ctTitle').value.trim();
+  const bodyText = document.getElementById('ctBody').value.trim();
+  const errEl = document.getElementById('ctErr');
+  errEl.textContent = '';
+  if (!title||!bodyText) { errEl.textContent='Заполни оба поля'; return; }
+  try {
+    const { topic } = await api('/topics',{method:'POST',body:{title,body:bodyText}});
+    toast('Тема создана', 'ok');
+    await loadTopics();
+    openTopic(topic.id);
+  } catch(e) { errEl.textContent = e.message; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  USER PROFILE SHEET
+// ═══════════════════════════════════════════════════════════════
+async function openUserProfile(userId) {
+  if (!userId) return;
+  try {
+    const data = await api(`/users/${userId}/public`);
+    const { user:u, profiles:uprofs, postsCount, commentsCount } = data;
+    document.getElementById('userSheetTitle').textContent = '@'+u.username;
+    const accentColor = u.accent||'var(--accent)';
+    const bannerHtml = u.banner
+      ? `<img src="${esc(u.banner)}" class="uprofile-banner" loading="lazy">`
+      : `<div style="width:100%;height:80px;background:${accentColor}33;border-radius:16px 16px 0 0"></div>`;
+    const avHtml = u.avatar
+      ? `<img src="${esc(u.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      : `<span style="font-size:22px">${esc(u.emoji||'👤')}</span>`;
+    const socials = u.socials||{};
+    const socialHtml = Object.entries(socials).filter(([,v])=>v).map(([k,v])=>{
+      const labels={vk:'VK',tg:'TG',inst:'IG',discord:'DC',site:'🌐'};
+      const href=k==='vk'?`https://vk.com/${v}`:k==='tg'?`https://t.me/${v}`:k==='inst'?`https://instagram.com/${v}`:v;
+      return `<a class="social-chip" href="${esc(href)}" target="_blank">${labels[k]||k} ${esc(v)}</a>`;
+    }).join('');
+    const isMe = curUser?.id===u.id;
+    document.getElementById('userSheetBody').innerHTML = `
+      ${bannerHtml}
+      <div style="padding:0 2px">
+        <div style="padding:0 0 10px"><div class="uprofile-av">${avHtml}</div></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:18px;font-weight:700;color:${accentColor}">${esc(u.displayName)}</div>
+            <div style="font-size:12px;color:var(--muted)">@${esc(u.username)} ${roleChip(u.role)}</div>
+          </div>
+          ${isMe?`<button class="btn btn-secondary btn-sm" onclick="openSettings()">✏️ Изменить</button>`:''}
+        </div>
+        ${u.status?`<div style="font-size:13px;color:var(--text2);margin-bottom:6px">🟢 ${esc(u.status)}</div>`:''}
+        ${u.location?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">📍 ${esc(u.location)}</div>`:''}
+        ${u.bio?`<div class="about-box">${esc(u.bio)}</div>`:''}
+        ${socialHtml?`<div style="margin-bottom:12px">${socialHtml}</div>`:''}
+        <div style="display:flex;gap:2px;margin-bottom:14px">
+          <div class="ustat"><div class="ustat-n">${uprofs.length}</div><div class="ustat-l">Анкет</div></div>
+          <div class="ustat"><div class="ustat-n">${postsCount}</div><div class="ustat-l">Постов</div></div>
+          <div class="ustat"><div class="ustat-n">${commentsCount}</div><div class="ustat-l">Комментов</div></div>
+        </div>
+        ${uprofs.length?`<div class="section-title">📋 Анкеты</div>
+          <div class="cards-grid">${uprofs.map(p=>`<div class="pcard" onclick="closeSheet('userSheet');openProfile(${p.id})">
+            <div class="pcard-name">${esc(p.emoji||'👤')} ${esc(p.name)}</div>
+            <div class="pcard-bio">${esc(p.bio||'')}</div>
+          </div>`).join('')}</div>`:''}
+      </div>`;
+    openSheet('userSheet');
+  } catch(e) { toast(e.message,'err'); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════════════════════
+function openSettings() {
+  if (!curUser) return openSheet('authSheet');
+  // Открываем полноценный сайт в браузере для настроек
+  if (tg) {
+    tg.openLink(window.location.origin);
+  } else {
+    window.open(window.location.origin, '_blank');
+  }
+  toast('Настройки открываются на сайте', 'warn');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SOCKET.IO
+// ═══════════════════════════════════════════════════════════════
+function initSocket() {
+  const token = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('token='))?.split('=')[1]||'';
+  socket = io({ auth:{token}, reconnectionDelay:1000 });
+
+  socket.on('profile:created', p => { if(!profiles.find(x=>x.id===p.id)){profiles.unshift(p);if(curPage==='home')render();} });
+  socket.on('profile:updated', p => { const i=profiles.findIndex(x=>x.id===p.id); if(i>=0)profiles[i]=p; else profiles.unshift(p); if(curPage==='home')render(); if(curProfile?.profile.id===p.id){curProfile.profile=p;renderProfileSheet();} });
+  socket.on('profile:deleted', ({id}) => { profiles=profiles.filter(x=>x.id!==id); if(curPage==='home')render(); if(curProfile?.profile.id===id)closeSheet('profileSheet'); });
+  socket.on('comment:new', c => { if(curProfile?.profile.id===c.profile_id&&!curProfile.comments.find(x=>x.id===c.id)){curProfile.comments.push(c);renderProfileSheet();scrollCommentsDown();} });
+  socket.on('comment:deleted', ({id}) => { if(curProfile){curProfile.comments=curProfile.comments.filter(x=>x.id!==id);renderProfileSheet();} });
+  socket.on('topic:created', t => { if(!topics.find(x=>x.id===t.id)){topics.unshift(t);if(curPage==='forum')render();} });
+  socket.on('topic:updated', t => { const i=topics.findIndex(x=>x.id===t.id); if(i>=0)topics[i]=t; else topics.unshift(t); if(curPage==='forum')render(); });
+  socket.on('topic:deleted', ({id}) => { topics=topics.filter(x=>x.id!==id); if(curPage==='forum')render(); if(curTopic?.topic.id===id)closeSheet('topicSheet'); });
+  socket.on('topic:posts_count', ({topicId,count}) => { const t=topics.find(x=>x.id===topicId); if(t){t.postsCount=count;if(curPage==='forum')render();} });
+  socket.on('post:new', p => { if(curTopic?.topic.id===p.topic_id&&!curTopic.posts.find(x=>x.id===p.id)){curTopic.posts.push(p);renderTopicSheet();} });
+  socket.on('post:deleted', ({id}) => { if(curTopic){curTopic.posts=curTopic.posts.filter(x=>x.id!==id);renderTopicSheet();} });
+  socket.on('settings:updated', upd => { if(upd.accent)document.documentElement.style.setProperty('--accent',upd.accent); });
+}
+
+function socketJoin(type, id) { if(socket){socket.emit('join:'+type, id);} }
+
+function scrollCommentsDown() {
+  const sb = document.getElementById('profileSheetBody');
+  if (sb) setTimeout(()=>sb.scrollTop=sb.scrollHeight, 100);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DATA LOADING
+// ═══════════════════════════════════════════════════════════════
+async function loadMe() { try{const{user}=await api('/auth/me');curUser=user;}catch{curUser=null;} }
+async function loadProfiles() { try{const{profiles:p}=await api('/profiles');profiles=p;}catch{profiles=[];} }
+async function loadTopics() { try{const{topics:t}=await api('/topics');topics=t;}catch{topics=[];} }
+async function loadSettings() {
+  try {
+    const { settings } = await api('/settings');
+    if (settings.accent) document.documentElement.style.setProperty('--accent', settings.accent);
+    if (settings.siteName) document.title = settings.siteName;
+  } catch {}
+}
+async function loadAll() {
+  await Promise.all([loadSettings(), loadMe()]);
+  await Promise.all([loadProfiles(), loadTopics()]);
+  renderHeader();
+  render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+
+// Форум — кнопка создать темы через ➕
+const origNav = nav;
+window.nav = function(page) {
+  if (page === 'create' && curPage === 'forum') {
+    requireAuth(() => openCreateTopic());
+    return;
+  }
+  origNav(page);
+};
+
+loadAll().then(() => initSocket());
+</script>
+</body>
+</html>
