@@ -251,6 +251,23 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY AUTOINC
 try { db.exec(`CREATE TABLE IF NOT EXISTS dm_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, from_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL, created_at INTEGER NOT NULL, read_at INTEGER DEFAULT NULL)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_dm_from ON dm_messages(from_id)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_dm_to ON dm_messages(to_id)`); } catch {}
+
+// Таблица жалоб
+try { db.exec(`CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  reporter_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  target_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reason TEXT NOT NULL,
+  details TEXT,
+  status TEXT NOT NULL DEFAULT 'new',
+  resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  resolved_at INTEGER,
+  created_at INTEGER NOT NULL
+)`); } catch {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)`); } catch {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_friends_from ON friends(from_id,status)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_friends_to ON friends(to_id,status)`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id)`); } catch {}
@@ -1195,6 +1212,146 @@ app.get('/api/audit', requireAdmin, (req,res) => {
 });
 
 // ── STATIC ─────────────────────────────────────────────────────────
+// ── REPORTS / ЖАЛОБЫ ────────────────────────────────────────────────
+const REPORT_REASONS = ['spam','offensive','forbidden','fraud','other'];
+const REPORT_TARGETS = ['profile','comment','post','user','dm','wall_post','gift'];
+
+function checkReportLimit(userId) {
+  const since = Date.now() - 24*60*60*1000;
+  const cnt = db.prepare('SELECT COUNT(*) c FROM reports WHERE reporter_id=? AND created_at>?').get(userId, since).c;
+  return cnt < 30;
+}
+
+app.post('/api/reports', requireAuth, (req, res) => {
+  const { targetType, targetId, reason, details, targetUserId } = req.body || {};
+  if (!REPORT_TARGETS.includes(targetType)) return res.status(400).json({ error:'Неверный тип объекта' });
+  if (!REPORT_REASONS.includes(reason)) return res.status(400).json({ error:'Неверная причина' });
+  if (!targetId || !Number.isFinite(+targetId)) return res.status(400).json({ error:'Не указан объект' });
+  if (!checkReportLimit(req.user.id)) return res.status(429).json({ error:'Превышен лимит жалоб (30/сутки)' });
+  // Проверка что не жалуется сам на себя
+  let resolvedTargetUserId = targetUserId ? +targetUserId : null;
+  if (targetType === 'profile') {
+    const p = db.prepare('SELECT owner_id FROM profiles WHERE id=?').get(+targetId);
+    if (p) resolvedTargetUserId = p.owner_id;
+  } else if (targetType === 'comment') {
+    const c = db.prepare('SELECT user_id FROM comments WHERE id=?').get(+targetId);
+    if (c) resolvedTargetUserId = c.user_id;
+  } else if (targetType === 'post') {
+    const p = db.prepare('SELECT user_id FROM posts WHERE id=?').get(+targetId);
+    if (p) resolvedTargetUserId = p.user_id;
+  } else if (targetType === 'user') {
+    resolvedTargetUserId = +targetId;
+  } else if (targetType === 'dm') {
+    const m = db.prepare('SELECT from_id FROM dm_messages WHERE id=?').get(+targetId);
+    if (m) resolvedTargetUserId = m.from_id;
+  }
+  if (resolvedTargetUserId === req.user.id) return res.status(400).json({ error:'Нельзя жаловаться на себя' });
+  const info = db.prepare(`INSERT INTO reports(reporter_id,target_type,target_id,target_user_id,reason,details,status,created_at) VALUES(?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, targetType, +targetId, resolvedTargetUserId, reason, (details||'').slice(0,500), 'new', Date.now());
+  audit(req.user, 'report_created', `#${info.lastInsertRowid} ${targetType}#${targetId} reason=${reason}`);
+  // Уведомить модераторов
+  const mods = db.prepare("SELECT id FROM users WHERE role IN ('admin','moderator','owner') AND banned=0").all();
+  for (const m of mods) io.to('user:'+m.id).emit('report:new', { id: info.lastInsertRowid });
+  res.json({ ok:true, id: info.lastInsertRowid });
+});
+
+app.get('/api/reports', requireMod, (req, res) => {
+  const status = req.query.status || 'all';
+  const where = status === 'all' ? '' : `WHERE r.status='${status.replace(/[^a-z]/g,'')}'`;
+  const rows = db.prepare(`
+    SELECT r.*, 
+      ru.username as reporter_username, ru.display_name as reporter_name,
+      tu.username as target_username, tu.display_name as target_name,
+      resu.username as resolver_username
+    FROM reports r
+    LEFT JOIN users ru ON ru.id=r.reporter_id
+    LEFT JOIN users tu ON tu.id=r.target_user_id
+    LEFT JOIN users resu ON resu.id=r.resolved_by
+    ${where}
+    ORDER BY r.created_at DESC LIMIT 200
+  `).all();
+  // Подгружаем превью контента
+  const enriched = rows.map(r => {
+    let preview = null;
+    try {
+      if (r.target_type === 'profile') {
+        const p = db.prepare('SELECT name,bio FROM profiles WHERE id=?').get(r.target_id);
+        if (p) preview = (p.name||'') + (p.bio?' — '+p.bio.slice(0,100):'');
+      } else if (r.target_type === 'comment') {
+        const c = db.prepare('SELECT text FROM comments WHERE id=?').get(r.target_id);
+        if (c) preview = (c.text||'').slice(0,200);
+      } else if (r.target_type === 'post') {
+        const p = db.prepare('SELECT text FROM posts WHERE id=?').get(r.target_id);
+        if (p) preview = (p.text||'').slice(0,200);
+      } else if (r.target_type === 'dm') {
+        const m = db.prepare('SELECT text FROM dm_messages WHERE id=?').get(r.target_id);
+        if (m) preview = (m.text||'').slice(0,200);
+      }
+    } catch {}
+    return { ...r, preview };
+  });
+  res.json({ reports: enriched });
+});
+
+app.get('/api/reports/count', requireMod, (req, res) => {
+  const row = db.prepare("SELECT COUNT(*) c FROM reports WHERE status='new'").get();
+  res.json({ count: row.c || 0 });
+});
+
+app.post('/api/reports/:id/resolve', requireMod, (req, res) => {
+  const id = +req.params.id;
+  const { action, status } = req.body || {};
+  const r = db.prepare('SELECT * FROM reports WHERE id=?').get(id);
+  if (!r) return res.status(404).json({ error:'Жалоба не найдена' });
+  let actionTaken = action || 'none';
+  // Выполняем действие если запрошено
+  if (action === 'delete_content') {
+    try {
+      if (r.target_type === 'profile') {
+        const p = db.prepare('SELECT * FROM profiles WHERE id=?').get(r.target_id);
+        if (p) {
+          if (p.avatar) removeFile(p.avatar);
+          db.prepare('DELETE FROM profiles WHERE id=?').run(r.target_id);
+          io.emit('profile:deleted', { id: r.target_id });
+        }
+      } else if (r.target_type === 'comment') {
+        const c = db.prepare('SELECT * FROM comments WHERE id=?').get(r.target_id);
+        if (c) {
+          if (c.image) removeFile(c.image);
+          db.prepare('DELETE FROM comments WHERE id=?').run(r.target_id);
+          io.to('profile:'+c.profile_id).emit('comment:deleted', { id: r.target_id });
+        }
+      } else if (r.target_type === 'post') {
+        const p = db.prepare('SELECT * FROM posts WHERE id=?').get(r.target_id);
+        if (p) {
+          if (p.image) removeFile(p.image);
+          db.prepare('DELETE FROM posts WHERE id=?').run(r.target_id);
+          io.to('topic:'+p.topic_id).emit('post:deleted', { id: r.target_id });
+        }
+      } else if (r.target_type === 'dm') {
+        db.prepare('DELETE FROM dm_messages WHERE id=?').run(r.target_id);
+      }
+    } catch(e) { console.error('delete content:', e); }
+  } else if (action === 'ban_user') {
+    if (r.target_user_id) {
+      db.prepare('UPDATE users SET banned=1 WHERE id=?').run(r.target_user_id);
+    }
+  } else if (action === 'warn_user') {
+    if (r.target_user_id) {
+      io.to('user:'+r.target_user_id).emit('mod:warning', { reason: r.reason, message: 'Вам выдано предупреждение модератором' });
+    }
+  }
+  const finalStatus = status || (action ? 'resolved' : 'in_progress');
+  db.prepare('UPDATE reports SET status=?, resolved_by=?, resolved_at=? WHERE id=?').run(finalStatus, req.user.id, Date.now(), id);
+  audit(req.user, 'report_resolve', `#${id} action=${actionTaken} status=${finalStatus}`);
+  res.json({ ok:true, status: finalStatus });
+});
+
+app.delete('/api/reports/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM reports WHERE id=?').run(+req.params.id);
+  res.json({ ok:true });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 // Отдаём uploads из UPLOADS_DIR (на Railway это /data/uploads)
 app.use('/uploads', express.static(UPLOADS_DIR));

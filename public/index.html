@@ -659,6 +659,35 @@ input,textarea,select{font-family:var(--font);outline:none}
   </div>
 </div>
 
+<!-- REPORT MODAL -->
+<div class="overlay" id="reportOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">⚠️ Пожаловаться</div>
+      <button class="modal-close" onclick="document.getElementById('reportOverlay').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="auth-err" id="reportErr"></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="reportTargetInfo"></div>
+      <div class="fgroup">
+        <label class="flabel">Причина</label>
+        <select class="finput" id="reportReason">
+          <option value="spam">📨 Спам</option>
+          <option value="offensive">🤬 Оскорбления</option>
+          <option value="forbidden">🚫 Запрещённый контент</option>
+          <option value="fraud">💰 Мошенничество</option>
+          <option value="other">❓ Другое</option>
+        </select>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Подробности (необязательно)</label>
+        <textarea class="ftextarea" id="reportDetails" maxlength="500" placeholder="Опиши подробнее..."></textarea>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="submitReport()">Отправить жалобу</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIRM MODAL -->
 <div class="overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -1152,7 +1181,9 @@ function renderProfileModal() {
     ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="quickTogglePin(${p.id})">📌 ${p.pinned?'Открепить':'Закрепить'}</button>`:''}
     ${isMod()?`<button class="btn btn-secondary btn-sm" onclick="quickToggleHide(${p.id})">${p.hidden?'👁 Показать':'🙈 Скрыть'}</button>`:''}
     ${canDelete?`<button class="btn btn-danger btn-sm" onclick="quickDeleteProfile(${p.id})">🗑️ Удалить</button>`:''}
-  </div>` : '';
+  </div>` : (curUser ? `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" style="color:var(--muted)" onclick="openReport('profile',${p.id},'анкета ${esc(p.name)}')">⚠️ Пожаловаться</button>
+  </div>` : '');
 
   // Аватарка анкеты с кнопкой загрузки для владельца
   const avHtml = canEdit
@@ -1202,7 +1233,10 @@ function renderProfileModal() {
         <div class="cm-head">${nameHtml}<span class="cm-time">${timeAgo(c.createdAt)}</span></div>
         ${c.text?`<div class="cm-text">${esc(c.text)}</div>`:''}
         ${c.image?`<img src="${esc(c.image)}" class="cm-image" onclick="openLightbox('${esc(c.image)}')" loading="lazy">`:''}
-        ${canDel?`<div class="cm-actions"><button class="cm-act red" onclick="deleteComment(${c.id})">Удалить</button></div>`:''}
+        <div class="cm-actions">
+          ${canDel?`<button class="cm-act red" onclick="deleteComment(${c.id})">Удалить</button>`:''}
+          ${curUser && c.userId !== curUser.id && !isAnon ? `<button class="cm-act" style="color:var(--muted)" onclick="openReport('comment',${c.id},'комментарий от ${esc(c.author)}')">⚠️</button>` : ''}
+        </div>
       </div>
     </div>`;
   }).join('') || '<div style="color:var(--muted);font-size:12px;padding:8px 0">Комментариев пока нет</div>';
@@ -1560,7 +1594,10 @@ function renderTopicModal() {
           ${p.image?`<img src="${esc(p.image)}" class="post-image" onclick="openLightbox('${esc(p.image)}')" loading="lazy">`:''}
         </div>
       </div>
-      ${canDel?`<div class="tp-actions"><button class="btn btn-secondary btn-sm" onclick="deletePost(${p.id})">🗑️ Удалить</button></div>`:''}
+      <div class="tp-actions">
+        ${canDel?`<button class="btn btn-secondary btn-sm" onclick="deletePost(${p.id})">🗑️ Удалить</button>`:''}
+        ${curUser && !canDel && !isAnon ? `<button class="btn btn-ghost btn-sm" style="color:var(--muted)" onclick="openReport('post',${p.id},'пост от ${esc(p.author)}')">⚠️ Пожаловаться</button>` : ''}
+      </div>
     </div>`;
   }).join('');
 
@@ -2086,6 +2123,7 @@ async function renderAdmin() {
     ['users', '👥 Пользователи'],
     ['profiles', '📋 Анкеты'],
     ['topics', '💬 Темы'],
+    ['reports', '⚠️ Жалобы'],
   ];
   if (isAdmin()) tabs.push(['audit', '📜 Лог']);
   if (isAdmin()) tabs.push(['danger', '⚠ Опасные']);
@@ -2103,6 +2141,7 @@ async function renderAdmin() {
   if (adminTab === 'users') renderAdminUsers();
   else if (adminTab === 'profiles') renderAdminProfiles();
   else if (adminTab === 'topics') renderAdminTopics();
+  else if (adminTab === 'reports') renderAdminReports();
   else if (adminTab === 'audit') renderAdminAudit();
   else if (adminTab === 'danger') renderAdminDanger();
 }
@@ -2201,6 +2240,62 @@ async function renderAdminTopics() {
     `<div class="atable-wrap"><table class="atable">
       <thead><tr><th>Тема</th><th>Ответов</th><th>Создана</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="empty-state">Тем нет</div>';
+}
+
+let _reportsFilter = 'new';
+const REPORT_REASON_LABELS = { spam:'📨 Спам', offensive:'🤬 Оскорбления', forbidden:'🚫 Запрещённый контент', fraud:'💰 Мошенничество', other:'❓ Другое' };
+const REPORT_TYPE_LABELS = { profile:'Анкета', comment:'Комментарий', post:'Пост', user:'Пользователь', dm:'Сообщение', wall_post:'Пост на стене', gift:'Подарок' };
+const REPORT_STATUS_LABELS = { new:'🆕 Новая', in_progress:'⏳ В обработке', resolved:'✓ Решена', rejected:'✕ Отклонена' };
+
+async function renderAdminReports() {
+  try {
+    const { reports } = await api('/reports?status=' + _reportsFilter);
+    const filterBar = `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      ${['all','new','in_progress','resolved','rejected'].map(s => 
+        `<button class="btn btn-${_reportsFilter===s?'primary':'secondary'} btn-sm" onclick="_reportsFilter='${s}';renderAdminReports()">${s==='all'?'Все':REPORT_STATUS_LABELS[s]}</button>`
+      ).join('')}
+    </div>`;
+    if (!reports.length) {
+      document.getElementById('adminTabBody').innerHTML = filterBar + '<div class="empty-state">Жалоб нет</div>';
+      return;
+    }
+    const rows = reports.map(r => {
+      const status = REPORT_STATUS_LABELS[r.status] || r.status;
+      const targetLabel = REPORT_TYPE_LABELS[r.target_type] || r.target_type;
+      const reason = REPORT_REASON_LABELS[r.reason] || r.reason;
+      const reporterName = esc(r.reporter_name || r.reporter_username || 'Аноним');
+      const targetName = r.target_name ? esc(r.target_name) : (r.target_username ? '@'+esc(r.target_username) : '—');
+      const preview = r.preview ? `<div style="font-size:12px;color:var(--text2);background:var(--card2);padding:6px 10px;border-radius:6px;margin:4px 0;border-left:3px solid var(--accent2)">${esc(r.preview)}</div>` : '';
+      const details = r.details ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">💬 ${esc(r.details)}</div>` : '';
+      const actions = r.status === 'new' || r.status === 'in_progress' ? `
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn btn-danger btn-sm" onclick="resolveReport(${r.id},'delete_content','resolved')">🗑️ Удалить контент</button>
+          <button class="btn btn-secondary btn-sm" onclick="resolveReport(${r.id},'warn_user','resolved')">⚠️ Предупреждение</button>
+          ${isAdmin()?`<button class="btn btn-danger btn-sm" onclick="resolveReport(${r.id},'ban_user','resolved')">🚫 Бан</button>`:''}
+          <button class="btn btn-secondary btn-sm" onclick="resolveReport(${r.id},null,'resolved')">✓ Закрыть как решено</button>
+          <button class="btn btn-secondary btn-sm" onclick="resolveReport(${r.id},null,'rejected')">✕ Отклонить</button>
+        </div>` : `<div style="font-size:11px;color:var(--muted);margin-top:6px">${r.resolver_username?`Закрыл: @${esc(r.resolver_username)}`:''}</div>`;
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+          <div><b>${reason}</b> · ${targetLabel} #${r.target_id}</div>
+          <div style="font-size:11px;color:var(--muted)">${status} · ${timeAgo(r.created_at)}</div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px">От: ${reporterName} → На: ${targetName}</div>
+        ${preview}
+        ${details}
+        ${actions}
+      </div>`;
+    }).join('');
+    document.getElementById('adminTabBody').innerHTML = filterBar + rows;
+  } catch(e) { document.getElementById('adminTabBody').innerHTML = `<div class="empty-state">Ошибка: ${esc(e.message)}</div>`; }
+}
+
+async function resolveReport(id, action, status) {
+  try {
+    await api(`/reports/${id}/resolve`, { method:'POST', body:{ action, status } });
+    toast('Жалоба обработана', 'ok');
+    renderAdminReports();
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 async function renderAdminAudit() {
@@ -2569,6 +2664,34 @@ async function friendAction(action, userId) {
 }
 
 // Загрузить счётчик входящих заявок
+// ── REPORTS / ЖАЛОБЫ ─────────────────────────────────────────────
+let _reportCtx = null; // { targetType, targetId, label }
+function openReport(targetType, targetId, label) {
+  if (!curUser) { openAuth(); return; }
+  _reportCtx = { targetType, targetId, label: label||'' };
+  document.getElementById('reportErr').textContent = '';
+  document.getElementById('reportTargetInfo').textContent = label ? `Объект: ${label}` : `Тип: ${targetType} #${targetId}`;
+  document.getElementById('reportReason').value = 'spam';
+  document.getElementById('reportDetails').value = '';
+  document.getElementById('reportOverlay').classList.add('open');
+}
+async function submitReport() {
+  if (!_reportCtx) return;
+  const reason = document.getElementById('reportReason').value;
+  const details = document.getElementById('reportDetails').value.trim();
+  const errEl = document.getElementById('reportErr');
+  errEl.textContent = '';
+  try {
+    await api('/reports', { method:'POST', body:{
+      targetType: _reportCtx.targetType,
+      targetId: _reportCtx.targetId,
+      reason, details
+    }});
+    document.getElementById('reportOverlay').classList.remove('open');
+    toast('Жалоба отправлена. Спасибо!', 'ok');
+  } catch(e) { errEl.textContent = e.message; }
+}
+
 async function loadFriendRequestCount() {
   if (!curUser) return;
   try {
@@ -2807,6 +2930,12 @@ async function friendSearchAdd(userId) {
 
 function initFriendSockets() {
   if (!socket) return;
+  socket.on('report:new', () => {
+    if (isMod()) toast('⚠️ Новая жалоба в админке', 'warn');
+  });
+  socket.on('mod:warning', ({ reason, message }) => {
+    toast(`⚠️ Предупреждение модератора: ${reason}`, 'err');
+  });
   socket.on('friend:request', ({ user: u }) => {
     pendingFriendRequests++;
     updateNotifBadges();
