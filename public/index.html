@@ -955,7 +955,7 @@ function renderHome() {
       ${p.anon?'<div class="admin-badge-mini" style="background:#5865f220;color:var(--accent2);border-color:#5865f240">🥷 АНОНИМНО</div>':''}
       ${p.pinned&&!isMod()?'<div class="pcard-pin">📌</div>':''}
       <div class="pcard-top">
-        <div class="pcard-av" style="background:${esc(p.color)}40">${p.avatar?`<img src="${esc(p.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`:esc(p.emoji||'👤')}</div>
+        <div class="pcard-av" style="background:${esc(p.color)}40">${p.avatar?`<img src="${esc(p.avatar)}" loading="lazy" decoding="async" style="width:44px;height:44px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:esc(p.emoji||'👤')}</div>
         <div class="pcard-info">
           <div class="pcard-name">${esc(p.name)}</div>
           <div class="pcard-meta">${p.age?p.age+' лет · ':''}${authorMeta}</div>
@@ -1065,7 +1065,7 @@ function previewCpAvatar() {
   if (!f) return;
   const reader = new FileReader();
   reader.onload = e => {
-    document.getElementById('cpAvPreview').innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+    document.getElementById('cpAvPreview').innerHTML = `<img loading="lazy" decoding="async" src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
     document.getElementById('cpAvClear').style.display = '';
   };
   reader.readAsDataURL(f);
@@ -1159,7 +1159,7 @@ function closeProfile() {
 }
 
 function avatarHtml(src, emoji, size='72px', cls='') {
-  if (src) return `<img src="${esc(src)}" class="avatar-img ${cls}" style="width:${size};height:${size}" onerror="this.style.display='none'">`;
+  if (src) return `<img loading="lazy" decoding="async" src="${esc(src)}" class="avatar-img ${cls}" style="width:${size};height:${size}" onerror="this.style.display='none'">`;
   return `<div class="pm-av" style="width:${size};height:${size};font-size:calc(${size} * .45)">${esc(emoji||'👤')}</div>`;
 }
 
@@ -1189,12 +1189,12 @@ function renderProfileModal() {
   const avHtml = canEdit
     ? `<div class="avatar-upload-wrap" onclick="uploadProfileAvatar(${p.id})" title="Сменить аватарку">
         ${p.avatar
-          ? `<img src="${esc(p.avatar)}" class="avatar-img" style="width:72px;height:72px">`
+          ? `<img loading="lazy" decoding="async" src="${esc(p.avatar)}" class="avatar-img" style="width:72px;height:72px">`
           : `<div class="pm-av" style="background:${esc(p.color)}40">${esc(p.emoji||'👤')}</div>`}
         <div class="avatar-overlay">📷</div>
        </div>`
     : p.avatar
-      ? `<img src="${esc(p.avatar)}" class="avatar-img" style="width:72px;height:72px">`
+      ? `<img loading="lazy" decoding="async" src="${esc(p.avatar)}" class="avatar-img" style="width:72px;height:72px">`
       : `<div class="pm-av" style="background:${esc(p.color)}40">${esc(p.emoji||'👤')}</div>`;
 
   // Галерея фото
@@ -1221,7 +1221,7 @@ function renderProfileModal() {
     const cmAvHtml = isAnon
       ? `<div class="cm-av anon-admin"><div class="cm-av-emoji">🛡️</div></div>`
       : c.userAvatar
-        ? `<div class="cm-av"><img src="${esc(c.userAvatar)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="cm-av-emoji" style="display:none">${esc(c.userEmoji||'👤')}</div></div>`
+        ? `<div class="cm-av"><img loading="lazy" decoding="async" src="${esc(c.userAvatar)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="cm-av-emoji" style="display:none">${esc(c.userEmoji||'👤')}</div></div>`
         : `<div class="cm-av"><div class="cm-av-emoji">${esc(c.userEmoji||'👤')}</div></div>`;
     // Имя: анон — не кликабельно, иначе — ссылка на профиль
     const nameHtml = isAnon
@@ -1245,7 +1245,7 @@ function renderProfileModal() {
     <div id="cmAttachPreview"></div>
     <div class="comment-input-row">
       ${curUser.avatar
-        ? `<img src="${esc(curUser.avatar)}" class="avatar-img-sm" style="width:28px;height:28px;flex-shrink:0">`
+        ? `<img loading="lazy" decoding="async" src="${esc(curUser.avatar)}" class="avatar-img-sm" style="width:28px;height:28px;flex-shrink:0">`
         : `<div class="cm-av">${esc(curUser.emoji||'👤')}</div>`}
       <div style="flex:1;display:flex;flex-direction:column;gap:4px">
         <div class="comment-field-wrap">
@@ -1348,7 +1348,7 @@ function previewCommentImage(input) {
   if (!prev) return;
   if (_cmImageFile) {
     const url = URL.createObjectURL(_cmImageFile);
-    prev.innerHTML = `<div class="img-attach-preview"><img src="${url}"><button class="rm" onclick="clearCommentImage()">✕</button></div>`;
+    prev.innerHTML = `<div class="img-attach-preview"><img loading="lazy" decoding="async" src="${url}"><button class="rm" onclick="clearCommentImage()">✕</button></div>`;
   } else { prev.innerHTML=''; }
 }
 function clearCommentImage() {
@@ -1407,7 +1407,7 @@ function adminEditProfile(id) {
     <div style="margin-bottom:14px">
       <label class="flabel">Аватарка анкеты</label>
       <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
-        ${p.avatar?`<img src="${esc(p.avatar)}" class="avatar-img" style="width:56px;height:56px">`:`<div class="pm-av" style="width:56px;height:56px;font-size:24px">${esc(p.emoji||'👤')}</div>`}
+        ${p.avatar?`<img loading="lazy" decoding="async" src="${esc(p.avatar)}" class="avatar-img" style="width:56px;height:56px">`:`<div class="pm-av" style="width:56px;height:56px;font-size:24px">${esc(p.emoji||'👤')}</div>`}
         <button class="btn btn-secondary btn-sm" onclick="uploadProfileAvatar(${p.id})">📷 Загрузить</button>
       </div>
     </div>
@@ -1577,7 +1577,7 @@ function renderTopicModal() {
     const avHtml = isAnon
       ? `<div class="tp-av" style="background:#ed424520;font-size:20px">🛡️</div>`
       : p.userAvatar
-        ? `<img src="${esc(p.userAvatar)}" class="avatar-img" style="width:52px;height:52px;margin:0 auto 6px;border-radius:50%;object-fit:cover" onerror="this.outerHTML='<div class=\\'tp-av\\'>${esc(p.userEmoji||'👤')}</div>'">`
+        ? `<img loading="lazy" decoding="async" src="${esc(p.userAvatar)}" class="avatar-img" style="width:52px;height:52px;margin:0 auto 6px;border-radius:50%;object-fit:cover" onerror="this.outerHTML='<div class=\\'tp-av\\'>${esc(p.userEmoji||'👤')}</div>'">`
         : `<div class="tp-av">${esc(p.userEmoji||'👤')}</div>`;
     const nameHtml = isAnon
       ? `<div class="tp-username" style="color:var(--red)">Анонимный<br>администратор</div>`
@@ -1640,7 +1640,7 @@ function previewPostImage(input) {
   if (!prev) return;
   if (_postImageFile) {
     const url = URL.createObjectURL(_postImageFile);
-    prev.innerHTML = `<div class="img-attach-preview"><img src="${url}"><button class="rm" onclick="clearPostImage()">✕</button></div>`;
+    prev.innerHTML = `<div class="img-attach-preview"><img loading="lazy" decoding="async" src="${url}"><button class="rm" onclick="clearPostImage()">✕</button></div>`;
   } else { prev.innerHTML=''; }
 }
 function clearPostImage() {
@@ -1724,7 +1724,7 @@ function quickDeleteTopic(id) {
 function openLightbox(src) {
   const lb = document.createElement('div');
   lb.className = 'photo-lightbox';
-  lb.innerHTML = `<img src="${esc(src)}">`;
+  lb.innerHTML = `<img loading="lazy" decoding="async" src="${esc(src)}">`;
   lb.onclick = () => lb.remove();
   document.body.appendChild(lb);
 }
@@ -1772,16 +1772,16 @@ function renderUserProfile() {
   // Баннер
   const bannerHtml = isMe
     ? `<div class="uprofile-banner" onclick="uploadUserBanner()" title="Сменить баннер">
-        ${u.banner ? `<img src="${esc(u.banner)}">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,${accentColor}44,${accentColor}22)"></div>`}
+        ${u.banner ? `<img loading="lazy" decoding="async" src="${esc(u.banner)}">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,${accentColor}44,${accentColor}22)"></div>`}
         <div class="uprofile-banner-overlay">📷 Сменить баннер</div>
        </div>`
     : `<div class="uprofile-banner" style="cursor:default">
-        ${u.banner ? `<img src="${esc(u.banner)}">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,${accentColor}44,${accentColor}22)"></div>`}
+        ${u.banner ? `<img loading="lazy" decoding="async" src="${esc(u.banner)}">` : `<div style="width:100%;height:100%;background:linear-gradient(135deg,${accentColor}44,${accentColor}22)"></div>`}
        </div>`;
 
   // Аватарка
   const avInner = u.avatar
-    ? `<img src="${esc(u.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    ? `<img loading="lazy" decoding="async" src="${esc(u.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
     : `<span style="font-size:28px">${esc(u.emoji||'👤')}</span>`;
   const avHtml = isMe
     ? `<div class="uprofile-av-wrap">
@@ -1814,7 +1814,7 @@ function renderUserProfile() {
             : '';
           return `<div class="pcard${p.hidden?' is-hidden':''}" onclick="closeUserProfile();openProfile(${p.id})">
             <div class="pcard-top">
-              <div class="pcard-av" style="background:${esc(p.color)}40">${p.avatar?`<img src="${esc(p.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`:esc(p.emoji||'👤')}</div>
+              <div class="pcard-av" style="background:${esc(p.color)}40">${p.avatar?`<img src="${esc(p.avatar)}" loading="lazy" decoding="async" style="width:44px;height:44px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:esc(p.emoji||'👤')}</div>
               <div class="pcard-info">
                 <div class="pcard-name">${esc(p.name)}</div>
                 <div class="pcard-meta">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
@@ -1893,10 +1893,10 @@ function openSettings() {
   const u = curUser;
   const s = u.socials || {};
   const avHtml = u.avatar
-    ? `<img src="${esc(u.avatar)}" class="avatar-img" style="width:64px;height:64px">`
+    ? `<img loading="lazy" decoding="async" src="${esc(u.avatar)}" class="avatar-img" style="width:64px;height:64px">`
     : `<div style="width:64px;height:64px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:28px">${esc(u.emoji||'👤')}</div>`;
   const bannerPreview = u.banner
-    ? `<img src="${esc(u.banner)}" style="width:100%;height:60px;object-fit:cover;border-radius:var(--r);margin-bottom:6px">`
+    ? `<img loading="lazy" decoding="async" src="${esc(u.banner)}" style="width:100%;height:60px;object-fit:cover;border-radius:var(--r);margin-bottom:6px">`
     : `<div style="width:100%;height:60px;background:var(--bg3);border-radius:var(--r);margin-bottom:6px"></div>`;
   document.getElementById('settingsBody').innerHTML = `
     <div class="auth-err" id="stErr"></div>
@@ -2588,7 +2588,7 @@ function updateNotifBadges() {
 }
 
 function friendAvHtml(u, size='38px') {
-  if (u.avatar) return `<div class="friend-av" style="width:${size};height:${size}"><img src="${esc(u.avatar)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px">${esc(u.emoji||'👤')}</div></div>`;
+  if (u.avatar) return `<div class="friend-av" style="width:${size};height:${size}"><img loading="lazy" decoding="async" src="${esc(u.avatar)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px">${esc(u.emoji||'👤')}</div></div>`;
   return `<div class="friend-av" style="width:${size};height:${size}">${esc(u.emoji||'👤')}</div>`;
 }
 
@@ -2875,7 +2875,7 @@ function renderDmMessages(msgs) {
   if (!el) return;
   el.innerHTML = msgs.length ? msgs.map(m => {
     const mine = m.from_id === curUser?.id;
-    const av = m.avatar ? `<img src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(m.emoji||'👤')}</div>`;
+    const av = m.avatar ? `<img loading="lazy" decoding="async" src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(m.emoji||'👤')}</div>`;
     return `<div style="display:flex;gap:8px;align-items:flex-end;${mine?'flex-direction:row-reverse':''}">
       ${av}
       <div style="max-width:70%">
@@ -2955,7 +2955,7 @@ function initFriendSockets() {
     if (isCurrentChat) {
       const el = document.getElementById('dmMessages');
       const mine = isMine;
-      const av = msg.avatar ? `<img src="${esc(msg.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(msg.emoji||'👤')}</div>`;
+      const av = msg.avatar ? `<img loading="lazy" decoding="async" src="${esc(msg.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(msg.emoji||'👤')}</div>`;
       el.insertAdjacentHTML('beforeend', `<div style="display:flex;gap:8px;align-items:flex-end;${mine?'flex-direction:row-reverse':''}">
         ${av}
         <div style="max-width:70%">

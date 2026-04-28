@@ -437,7 +437,7 @@ function autoResize(el) {
 function openLightbox(src) {
   const lb = document.createElement('div');
   lb.className = 'lightbox';
-  lb.innerHTML = `<img src="${esc(src)}">`;
+  lb.innerHTML = `<img loading="lazy" decoding="async" src="${esc(src)}">`;
   lb.onclick = () => lb.remove();
   document.body.appendChild(lb);
 }
@@ -531,7 +531,7 @@ function renderHeader() {
   if (curUser) {
     ico.textContent = curUser.avatar ? '' : (curUser.emoji||'👤');
     if (curUser.avatar && ico) {
-      ico.innerHTML = `<img src="${esc(curUser.avatar)}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`;
+      ico.innerHTML = `<img loading="lazy" decoding="async" src="${esc(curUser.avatar)}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`;
     }
     lbl.textContent = curUser.displayName.slice(0,8);
   } else {
@@ -649,7 +649,7 @@ function previewCpAvatarM() {
   const f = document.getElementById('cpAvFileM').files[0];
   if (!f) return;
   const reader = new FileReader();
-  reader.onload = e => { document.getElementById('cpAvPreviewM').innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`; };
+  reader.onload = e => { document.getElementById('cpAvPreviewM').innerHTML = `<img loading="lazy" decoding="async" src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`; };
   reader.readAsDataURL(f);
 }
 
@@ -719,7 +719,7 @@ function renderProfileSheet() {
     : `<div style="width:100%;height:100px;background:${esc(p.color)}33;border-radius:16px 16px 0 0"></div>`;
 
   const avHtml = p.avatar
-    ? `<img src="${esc(p.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    ? `<img loading="lazy" decoding="async" src="${esc(p.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
     : `<span style="font-size:26px">${esc(p.emoji||'👤')}</span>`;
 
   const photos = p.photos||[];
@@ -732,7 +732,7 @@ function renderProfileSheet() {
   const comments = (curProfile.comments||[]).map(c=>{
     const canDel = curUser && (c.user_id===curUser.id || isMod());
     const cmAv = c.user_avatar
-      ? `<div class="cm-av"><img src="${esc(c.user_avatar)}"></div>`
+      ? `<div class="cm-av"><img loading="lazy" decoding="async" src="${esc(c.user_avatar)}"></div>`
       : `<div class="cm-av">${c.user_emoji||'👤'}</div>`;
     return `<div class="cm-item">${cmAv}
       <div class="cm-bubble">
@@ -741,7 +741,7 @@ function renderProfileSheet() {
           <span class="cm-time">${timeAgo(c.created_at)}</span>
         </div>
         ${c.text?`<div class="cm-text">${esc(c.text)}</div>`:''}
-        ${c.image?`<img src="${esc(c.image)}" class="cm-img" onclick="openLightbox('${esc(c.image)}')">`:''}
+        ${c.image?`<img loading="lazy" decoding="async" src="${esc(c.image)}" class="cm-img" onclick="openLightbox('${esc(c.image)}')">`:''}
         ${canDel?`<button class="cm-del" onclick="deleteComment(${c.id})">Удалить</button>`:''}
       </div>
     </div>`;
@@ -777,7 +777,7 @@ function renderProfileSheet() {
     inputArea.style.display = 'flex';
     const cmAv = document.getElementById('cmAvatar');
     cmAv.innerHTML = curUser.avatar
-      ? `<img src="${esc(curUser.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      ? `<img loading="lazy" decoding="async" src="${esc(curUser.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
       : (curUser.emoji||'👤');
   } else {
     inputArea.style.display = 'none';
@@ -851,7 +851,7 @@ function renderTopicSheet() {
   const posts = (curTopic.posts||[]).map(p=>{
     const canDelPost = curUser && (p.user_id===curUser.id||isMod());
     const av = p.user_avatar
-      ? `<div class="post-av"><img src="${esc(p.user_avatar)}"></div>`
+      ? `<div class="post-av"><img loading="lazy" decoding="async" src="${esc(p.user_avatar)}"></div>`
       : `<div class="post-av">${'👤'}</div>`;
     return `<div class="post-item">${av}
       <div class="post-head">
@@ -860,7 +860,7 @@ function renderTopicSheet() {
         ${canDelPost?`<button class="cm-del" onclick="deletePost(${p.id})" style="margin-left:auto">🗑</button>`:''}
       </div>
       ${p.text?`<div class="post-text">${esc(p.text)}</div>`:''}
-      ${p.image?`<img src="${esc(p.image)}" class="post-img" onclick="openLightbox('${esc(p.image)}')">`:''}
+      ${p.image?`<img loading="lazy" decoding="async" src="${esc(p.image)}" class="post-img" onclick="openLightbox('${esc(p.image)}')">`:''}
     </div>`;
   }).join('') || `<div style="color:var(--muted);font-size:12px;padding:8px 0">Ответов пока нет</div>`;
 
@@ -880,7 +880,7 @@ function renderTopicSheet() {
     pa.style.display = 'flex';
     const pAv = document.getElementById('postAvatar');
     pAv.innerHTML = curUser.avatar
-      ? `<img src="${esc(curUser.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      ? `<img loading="lazy" decoding="async" src="${esc(curUser.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
       : (curUser.emoji||'👤');
   } else {
     pa.style.display = 'none';
@@ -964,7 +964,7 @@ async function openUserProfile(userId) {
       ? `<img src="${esc(u.banner)}" class="uprofile-banner" loading="lazy">`
       : `<div style="width:100%;height:80px;background:${accentColor}33;border-radius:16px 16px 0 0"></div>`;
     const avHtml = u.avatar
-      ? `<img src="${esc(u.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      ? `<img loading="lazy" decoding="async" src="${esc(u.avatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
       : `<span style="font-size:22px">${esc(u.emoji||'👤')}</span>`;
     const socials = u.socials||{};
     const socialHtml = Object.entries(socials).filter(([,v])=>v).map(([k,v])=>{
@@ -1066,7 +1066,7 @@ async function loadNotifCounts() {
 
 function friendAvHtmlMobile(u) {
   return u.avatar
-    ? `<img src="${esc(u.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+    ? `<img loading="lazy" decoding="async" src="${esc(u.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">`
     : `<div style="width:44px;height:44px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${esc(u.emoji||'👤')}</div>`;
 }
 
@@ -1147,7 +1147,7 @@ function renderDmMessagesM(msgs) {
   if (!el) return;
   el.innerHTML = msgs.length ? msgs.map(m => {
     const mine = m.from_id === curUser?.id;
-    const av = m.avatar ? `<img src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(m.emoji||'👤')}</div>`;
+    const av = m.avatar ? `<img loading="lazy" decoding="async" src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(m.emoji||'👤')}</div>`;
     return `<div style="display:flex;gap:8px;align-items:flex-end;${mine?'flex-direction:row-reverse':''}">${av}<div style="max-width:70%"><div style="background:${mine?'var(--accent)':'var(--card2)'};color:${mine?'#fff':'var(--text)'};padding:8px 12px;border-radius:${mine?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:14px;word-break:break-word">${esc(m.text)}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:${mine?'right':'left'}">${new Date(m.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div></div></div>`;
   }).join('') : '<div style="text-align:center;color:var(--muted);padding:24px">Напиши первым!</div>';
   el.scrollTop = el.scrollHeight;
@@ -1195,7 +1195,7 @@ function initSocket() {
     const isCurrent = isOpen && (msg.from_id === dmUserId || msg.to_id === dmUserId);
     if (isCurrent) {
       const el = document.getElementById('dmSheetMessages');
-      const av = msg.avatar ? `<img src="${esc(msg.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(msg.emoji||'👤')}</div>`;
+      const av = msg.avatar ? `<img loading="lazy" decoding="async" src="${esc(msg.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(msg.emoji||'👤')}</div>`;
       el.insertAdjacentHTML('beforeend', `<div style="display:flex;gap:8px;align-items:flex-end;${isMine?'flex-direction:row-reverse':''}">${av}<div style="max-width:70%"><div style="background:${isMine?'var(--accent)':'var(--card2)'};color:${isMine?'#fff':'var(--text)'};padding:8px 12px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:14px;word-break:break-word">${esc(msg.text)}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;text-align:${isMine?'right':'left'}">${new Date(msg.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div></div></div>`);
       el.scrollTop = el.scrollHeight;
       if (!isMine) api(`/dm/${msg.from_id}`);

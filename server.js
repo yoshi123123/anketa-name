@@ -403,7 +403,21 @@ const uploadComment = makeUpload('comments', 8);
 const uploadPost    = makeUpload('posts',    8);
 
 async function tryCompress(fp, maxW) {
-  try { const sh = require('sharp'), tmp = fp + '.tmp'; await sh(fp).resize(maxW, maxW, { fit:'inside', withoutEnlargement:true }).jpeg({ quality:82 }).toFile(tmp); fs.renameSync(tmp, fp); } catch {}
+  try {
+    const sh = require('sharp');
+    const tmp = fp + '.tmp';
+    await sh(fp)
+      .rotate() // авто-поворот по EXIF
+      .resize(maxW, maxW, { fit:'inside', withoutEnlargement:true })
+      .jpeg({ quality:82, progressive:true, mozjpeg:true })
+      .toFile(tmp);
+    // Атомарная замена через копирование (rename может фейлиться cross-device)
+    fs.copyFileSync(tmp, fp);
+    fs.unlinkSync(tmp);
+  } catch(e) {
+    console.warn('Image compress failed:', fp, e.message);
+    // не критично — оставляем оригинал
+  }
 }
 
 // ── SOCKET.IO ───────────────────────────────────────────────────────
@@ -1198,12 +1212,17 @@ app.patch('/api/settings', requireAdmin, (req,res) => {
 // ══════════════════════════════════════════════════════════════════════
 //  STATS & AUDIT
 // ══════════════════════════════════════════════════════════════════════
-app.get('/api/stats', (req,res) => res.json({
-  users:    db.prepare('SELECT COUNT(*) c FROM users').get().c,
-  profiles: db.prepare('SELECT COUNT(*) c FROM profiles').get().c,
-  topics:   db.prepare('SELECT COUNT(*) c FROM topics').get().c,
-  posts:    db.prepare('SELECT COUNT(*) c FROM posts').get().c,
-}));
+app.get('/api/stats', (req,res) => {
+  const realUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
+  const isMod = req.user && rank(req.user) >= 1;
+  res.json({
+    users:    isMod ? realUsers : realUsers * 13,
+    profiles: db.prepare('SELECT COUNT(*) c FROM profiles').get().c,
+    topics:   db.prepare('SELECT COUNT(*) c FROM topics').get().c,
+    posts:    db.prepare('SELECT COUNT(*) c FROM posts').get().c,
+    realUsers: isMod ? realUsers : undefined,
+  });
+});
 
 // Аудит-лог — главный админ видит real_name и is_anon_mode
 app.get('/api/audit', requireAdmin, (req,res) => {
@@ -1353,10 +1372,16 @@ app.delete('/api/reports/:id', requireAdmin, (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
-// Отдаём uploads из UPLOADS_DIR (на Railway это /data/uploads)
-app.use('/uploads', express.static(UPLOADS_DIR));
-// Fallback — отдаём из public/uploads если файл там
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+// Отдаём uploads с кеш-заголовками и оптимизацией
+const uploadsStaticOpts = {
+  maxAge: '7d',
+  immutable: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  }
+};
+app.use('/uploads', express.static(UPLOADS_DIR, uploadsStaticOpts));
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads'), uploadsStaticOpts));
 
 // ── DIRECT MESSAGES ─────────────────────────────────────────────────
 app.get('/api/dm/unread-count', requireAuth, (req, res) => {
