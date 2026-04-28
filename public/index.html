@@ -168,18 +168,30 @@ input,textarea,select{font-family:var(--font);outline:none}
 .section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;margin-top:16px;display:flex;align-items:center;gap:6px}
 .about-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:12px}
 
-.comment-item{display:flex;gap:8px;margin-bottom:10px}
-.cm-av{width:28px;height:28px;border-radius:50%;background:var(--card2);font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.cm-bubble{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:0 var(--r2) var(--r2) var(--r2);padding:8px 12px}
-.cm-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.comment-item{display:flex;gap:8px;margin-bottom:12px}
+.cm-av{width:32px;height:32px;border-radius:50%;background:var(--card2);font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;border:1px solid var(--border)}
+.cm-av img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.cm-av img.broken{display:none}
+.cm-av-emoji{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:15px}
+.cm-av.anon-admin{background:#ed424520;border-color:#ed424540}
+.cm-bubble{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:0 var(--r2) var(--r2) var(--r2);padding:8px 12px;min-width:0}
+.cm-head{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
 .cm-name{font-size:12px;font-weight:700;color:var(--white)}
+.cm-name.anon{color:var(--red)}
 .cm-time{font-size:11px;color:var(--muted)}
-.cm-text{font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
+.cm-anon-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:#ed424520;color:var(--red);border:1px solid #ed424540;font-weight:700;letter-spacing:.3px}
+.cm-text{font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;word-break:break-word}
 .cm-actions{display:flex;gap:6px;margin-top:5px}
 .cm-act{background:none;border:none;font-size:11px;color:var(--muted);cursor:pointer;padding:2px 4px;border-radius:3px;transition:all .12s}
 .cm-act:hover{background:var(--card);color:var(--text)}
 .cm-act.red:hover{color:var(--red)}
 .comment-input-row{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
+@media(max-width:600px){
+  .comment-item{gap:6px}
+  .cm-av{width:28px;height:28px;font-size:13px}
+  .cm-bubble{padding:7px 10px}
+  .cm-text{font-size:12px}
+}
 .comment-field-wrap{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;transition:border-color .15s}
 .comment-field-wrap:focus-within{border-color:var(--accent)}
 .comment-field{width:100%;background:transparent;border:none;color:var(--text);padding:8px 12px;font-size:13px;resize:none;min-height:36px;max-height:120px;line-height:1.5}
@@ -259,6 +271,33 @@ input,textarea,select{font-family:var(--font);outline:none}
 .social-link{padding:4px 12px;border-radius:var(--r);background:var(--card2);border:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;transition:all .12s;cursor:pointer;text-decoration:none}
 .social-link:hover{border-color:var(--accent);color:var(--accent)}
 .uprofile-stats{display:flex;gap:2px;margin-bottom:14px}
+
+/* ══ FRIENDS ══ */
+.friend-btn{padding:8px 18px;border-radius:var(--r2);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.friend-btn-add{background:var(--accent);color:#fff}.friend-btn-add:hover{background:var(--accent-h)}
+.friend-btn-pending{background:var(--card2);color:var(--yellow);border:1px solid var(--yellow)40}
+.friend-btn-accept{background:var(--green);color:#fff}
+.friend-btn-friends{background:var(--card2);color:var(--green);border:1px solid var(--green)40}
+.friend-btn-blocked{background:var(--card2);color:var(--red);border:1px solid var(--red)40}
+.friend-actions-drop{position:relative;display:inline-block}
+.friend-actions-menu{position:absolute;top:calc(100%+4px);right:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);min-width:180px;z-index:50;overflow:hidden;display:none;flex-direction:column;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.friend-actions-menu.open{display:flex}
+.friend-menu-item{padding:9px 14px;font-size:13px;color:var(--text);background:none;border:none;text-align:left;cursor:pointer;transition:background .1s;width:100%}
+.friend-menu-item:hover{background:var(--card2)}
+.friend-menu-item.red{color:var(--red)}
+
+.friends-list{display:flex;flex-direction:column;gap:6px}
+.friend-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);cursor:pointer;transition:background .12s}
+.friend-row:hover{background:var(--card2)}
+.friend-av{width:38px;height:38px;border-radius:50%;background:var(--card2);font-size:17px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.friend-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.friend-info{flex:1;min-width:0}
+.friend-name{font-size:13px;font-weight:700;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.friend-sub{font-size:11px;color:var(--muted)}
+.friend-badge-count{background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:100px;min-width:20px;text-align:center}
+
+.notif-dot{width:8px;height:8px;border-radius:50%;background:var(--red);position:absolute;top:2px;right:2px;display:none}
+.notif-dot.show{display:block}
 .uprofile-stat{flex:1;text-align:center;padding:10px;background:var(--bg3);border-radius:var(--r)}
 .uprofile-stat-n{font-size:18px;font-weight:700;color:var(--white)}
 .uprofile-stat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
@@ -478,6 +517,10 @@ input,textarea,select{font-family:var(--font);outline:none}
     <button class="bnav-btn" id="bnavCreate" onclick="requireAuth(()=>nav('create'))">
       <span class="bico">➕</span>Создать
     </button>
+    <button class="bnav-btn" id="bnavFriends" onclick="requireAuth(openFriendsModal)" style="position:relative">
+      <span class="bico">👥</span>Друзья
+      <span class="notif-dot" id="friendsNotifDot"></span>
+    </button>
     <button class="bnav-btn" id="bnavProfile" onclick="onMobProfile()">
       <span class="bico" id="bnavProfileIco">👤</span>
       <span id="bnavProfileLbl">Войти</span>
@@ -579,6 +622,17 @@ input,textarea,select{font-family:var(--font);outline:none}
   </div>
 </div>
 
+<!-- FRIENDS MODAL -->
+<div class="overlay" id="friendsOverlay">
+  <div class="modal modal-lg">
+    <div class="modal-head">
+      <div class="modal-title">👥 Друзья</div>
+      <button class="modal-close" onclick="document.getElementById('friendsOverlay').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="friendsBody"></div>
+  </div>
+</div>
+
 <!-- CONFIRM MODAL -->
 <div class="overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -604,7 +658,7 @@ let profiles = [];
 let topics = [];
 let curProfile = null;       // {profile, comments}
 let curTopic = null;         // {topic, posts}
-let siteSettings = { siteName:'ANKETA.FORUM', welcome:'Анонимные анкеты и форум', accent:'#e8632a', adminAnon:false };
+let siteSettings = { siteName:'ANKETA.FORUM', welcome:'Анонимные анкеты и форум', accent:'#e8632a' };
 
 const ROLE_LABELS = { owner:'ГЛАВ АДМИН', admin:'АДМИН', moderator:'МОДЕРАТОР', user:'USER' };
 const ROLE_RANK   = { user:0, moderator:1, admin:2, owner:3 };
@@ -650,7 +704,6 @@ function roleChipHtml(role) {
   return `<span class="role-chip ${cls}">${ROLE_LABELS[role]||role}</span>`;
 }
 function displayAuthor(u) {
-  if (siteSettings.adminAnon && u && rolerank(u) >= 2) return 'Анонимный админ';
   return u?.displayName || u?.username || 'гость';
 }
 
@@ -770,6 +823,7 @@ function renderHeader() {
           <div class="udrop-sub">${ROLE_LABELS[role]||role}</div>
         </div>
         <button class="udrop-item" onclick="nav('create');closeUDrop()">➕ Создать анкету</button>
+        <button class="udrop-item" onclick="requireAuth(openFriendsModal);closeUDrop()">👥 Друзья <span id="hdrFriendsBadge" style="display:none;background:var(--red);color:#fff;font-size:10px;padding:1px 5px;border-radius:100px;margin-left:4px"></span></button>
         ${isAdmin() ? `<button class="udrop-item" onclick="openSiteEditor();closeUDrop()" style="color:var(--accent)">🛠 Редактор сайта</button>
         <button class="udrop-item" onclick="openAdmin();closeUDrop()" style="color:var(--red)">⚙ Админ-панель</button>` : ''}
         <button class="udrop-item" onclick="openSettings();closeUDrop()">⚙ Настройки</button>
@@ -832,15 +886,24 @@ function renderHome() {
         <button class="pcard-admin-btn" title="${p.hidden?'Показать':'Скрыть'}" onclick="quickToggleHide(${p.id})">${p.hidden?'👁':'🙈'}</button>
         <button class="pcard-admin-btn danger" title="Удалить" onclick="quickDeleteProfile(${p.id})">🗑️</button>
       </div>` : '';
+
+    // Автор — показываем только если анкета не анонимная
+    const authorMeta = p.anon
+      ? `<span style="color:var(--muted);font-size:11px">🥷 Аноним · ${timeAgo(p.createdAt)}</span>`
+      : p.authorName
+        ? `<span class="author-link" style="font-size:11px" onclick="event.stopPropagation();openUserProfile(${p.ownerId})">${esc(p.authorName)}</span><span style="color:var(--muted);font-size:11px"> · ${timeAgo(p.createdAt)}</span>`
+        : `<span style="color:var(--muted);font-size:11px">${timeAgo(p.createdAt)}</span>`;
+
     return `<div class="pcard${p.hidden?' is-hidden':''}" onclick="openProfile(${p.id})">
       ${adminControls}
       ${p.hidden?'<div class="admin-badge-mini">СКРЫТА</div>':''}
+      ${p.anon?'<div class="admin-badge-mini" style="background:#5865f220;color:var(--accent2);border-color:#5865f240">🥷 АНОНИМНО</div>':''}
       ${p.pinned&&!isMod()?'<div class="pcard-pin">📌</div>':''}
       <div class="pcard-top">
-        <div class="pcard-av" style="background:${esc(p.color)}40">${esc(p.emoji||'👤')}</div>
+        <div class="pcard-av" style="background:${esc(p.color)}40">${p.avatar?`<img src="${esc(p.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`:esc(p.emoji||'👤')}</div>
         <div class="pcard-info">
           <div class="pcard-name">${esc(p.name)}</div>
-          <div class="pcard-meta">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
+          <div class="pcard-meta">${p.age?p.age+' лет · ':''}${authorMeta}</div>
           <div class="pcard-tags">${(p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
         </div>
       </div>
@@ -893,6 +956,32 @@ function renderCreateProfile() {
   return `<h1 class="page-title">➕ Новая анкета</h1>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;max-width:600px">
       <div class="auth-err" id="cpErr"></div>
+
+      <!-- Статус анкеты — два переключателя вверху -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px">🥷 Анонимная анкета</div>
+            <div style="font-size:11px;color:var(--muted)">Твоё имя не будет видно другим</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="cpAnon" onchange="updateAnonHints()">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px">👤 Показать в профиле</div>
+            <div style="font-size:11px;color:var(--muted)">Анкета появится на странице твоего профиля</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="cpShowInProfile" checked onchange="updateAnonHints()">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div id="cpStatusHint" style="display:none;font-size:12px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--border)"></div>
+      </div>
+
       <div class="form-row">
         <div class="fgroup"><label class="flabel">Имя</label><input class="finput" id="cpName" maxlength="50" placeholder="Имя"></div>
         <div class="fgroup" style="max-width:120px"><label class="flabel">Возраст</label><input class="finput" id="cpAge" type="number" min="0" max="120"></div>
@@ -907,19 +996,56 @@ function renderCreateProfile() {
     </div>`;
 }
 
+function updateAnonHints() {
+  const anon = document.getElementById('cpAnon')?.checked;
+  const show = document.getElementById('cpShowInProfile')?.checked;
+  const hint = document.getElementById('cpStatusHint');
+  if (!hint) return;
+  if (anon && show) {
+    hint.style.display = 'block';
+    hint.style.borderColor = 'var(--yellow)';
+    hint.style.color = 'var(--yellow)';
+    hint.style.background = '#faa61a10';
+    hint.textContent = '⚠️ Анкета анонимная, но будет видна в профиле без имени автора';
+  } else if (anon && !show) {
+    hint.style.display = 'block';
+    hint.style.borderColor = '#5865f240';
+    hint.style.color = 'var(--accent2)';
+    hint.style.background = '#5865f210';
+    hint.textContent = '🥷 Анкета полностью анонимная — не привязана к профилю';
+  } else if (!anon && show) {
+    hint.style.display = 'block';
+    hint.style.borderColor = 'var(--green)';
+    hint.style.background = '#3ba55d10';
+    hint.style.color = 'var(--green)';
+    hint.textContent = '✓ Анкета публичная — автор виден, отображается в профиле';
+  } else {
+    hint.style.display = 'block';
+    hint.style.borderColor = 'var(--border)';
+    hint.style.background = 'var(--bg3)';
+    hint.style.color = 'var(--muted)';
+    hint.textContent = 'Анкета публичная, но не отображается в профиле';
+  }
+}
+
+// Оставляем старую функцию для совместимости
+function toggleAnonHint() { updateAnonHints(); }
+
 async function submitCreateProfile() {
   const name = document.getElementById('cpName').value.trim();
-  const age = +document.getElementById('cpAge').value || null;
+  const age  = +document.getElementById('cpAge').value || null;
   const emoji = document.getElementById('cpEmoji').value.trim() || '👤';
   const color = document.getElementById('cpColor').value || '#e8632a';
-  const bio = document.getElementById('cpBio').value.trim();
-  const tags = document.getElementById('cpTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const bio   = document.getElementById('cpBio').value.trim();
+  const tags  = document.getElementById('cpTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const anon  = document.getElementById('cpAnon')?.checked || false;
+  const showInProfile = document.getElementById('cpShowInProfile')?.checked ?? true;
   const errEl = document.getElementById('cpErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Имя обязательно'; return; }
   try {
-    await api('/profiles', { method:'POST', body:{ name, age, emoji, color, bio, tags } });
-    toast('Анкета опубликована', 'ok');
+    await api('/profiles', { method:'POST', body:{ name, age, emoji, color, bio, tags, anon, showInProfile } });
+    toast(anon ? '🥷 Анонимная анкета опубликована' : '✓ Анкета опубликована', 'ok');
     await loadProfiles();
     nav('home');
   } catch (e) { errEl.textContent = e.message; }
@@ -951,9 +1077,15 @@ function avatarHtml(src, emoji, size='72px', cls='') {
 function renderProfileModal() {
   if (!curProfile) return;
   const p = curProfile.profile;
-  const isOwn = curUser && p.ownerId === curUser.id;
+  // Для анонимных анкет ownerId скрыт, используем внутренний _ownerId если есть
+  const realOwnerId = p._ownerId || p.ownerId;
+  const isOwn = curUser && (realOwnerId === curUser.id);
   const canEdit = isOwn || isMod();
   const canDelete = isOwn || isMod();
+
+  const anonBadge = p.anon
+    ? `<span style="background:#5865f220;color:var(--accent2);border:1px solid #5865f240;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600">🥷 Анонимно</span>`
+    : '';
 
   const adminBar = canEdit ? `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
     <button class="btn btn-secondary btn-sm" onclick="adminEditProfile(${p.id})">✏️ Редактировать</button>
@@ -992,14 +1124,22 @@ function renderProfileModal() {
 
   // Комментарии
   const comments = (curProfile.comments || []).map(c => {
-    const canDel = curUser && (c.user_id === curUser.id || isMod());
-    const cmAvatar = c.user_avatar
-      ? `<img src="${esc(c.user_avatar)}" class="avatar-img-sm" style="width:28px;height:28px">`
-      : `<div class="cm-av">${c.user_emoji||'👤'}</div>`;
+    const canDel = curUser && (c.userId === curUser.id || isMod());
+    const isAnon = !!c.isAnonMode;
+    // Аватарка: если анон-режим — щит, иначе фото или эмодзи, с fallback при 404
+    const cmAvHtml = isAnon
+      ? `<div class="cm-av anon-admin"><div class="cm-av-emoji">🛡️</div></div>`
+      : c.userAvatar
+        ? `<div class="cm-av"><img src="${esc(c.userAvatar)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="cm-av-emoji" style="display:none">${esc(c.userEmoji||'👤')}</div></div>`
+        : `<div class="cm-av"><div class="cm-av-emoji">${esc(c.userEmoji||'👤')}</div></div>`;
+    // Имя: анон — не кликабельно, иначе — ссылка на профиль
+    const nameHtml = isAnon
+      ? `<span class="cm-name anon">Анонимный администратор</span><span class="cm-anon-badge">АНОН</span>`
+      : `<span class="cm-name"><span class="author-link" onclick="event.stopPropagation();openUserProfile(${c.userId})">${esc(c.author)}</span></span>`;
     return `<div class="comment-item">
-      ${cmAvatar}
+      ${cmAvHtml}
       <div class="cm-bubble">
-        <div class="cm-head"><div class="cm-name"><span class="author-link" onclick="event.stopPropagation();openUserProfile(${c.user_id})">${esc(c.author)}</span></div><div class="cm-time">${timeAgo(c.created_at)}</div></div>
+        <div class="cm-head">${nameHtml}<span class="cm-time">${timeAgo(c.createdAt)}</span></div>
         ${c.text?`<div class="cm-text">${esc(c.text)}</div>`:''}
         ${c.image?`<img src="${esc(c.image)}" class="cm-image" onclick="openLightbox('${esc(c.image)}')" loading="lazy">`:''}
         ${canDel?`<div class="cm-actions"><button class="cm-act red" onclick="deleteComment(${c.id})">Удалить</button></div>`:''}
@@ -1031,8 +1171,16 @@ function renderProfileModal() {
       ${avHtml}
       <div class="pm-info">
         <div class="pm-name">${esc(p.name)}</div>
-        <div class="pm-sub">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
-        <div class="pm-tags">${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+        <div class="pm-sub">
+          ${p.age?p.age+' лет · ':''}
+          ${p.anon
+            ? '<span style="color:var(--accent2)">🥷 Аноним</span> · '
+            : p.authorName
+              ? `<span class="author-link" onclick="openUserProfile(${p.ownerId})">${esc(p.authorName)}</span> · `
+              : ''}
+          ${timeAgo(p.createdAt)}
+        </div>
+        <div class="pm-tags" style="gap:5px;flex-wrap:wrap;display:flex">${anonBadge}${p.showInProfile?'':'<span style="font-size:10px;color:var(--muted);padding:1px 6px;background:var(--bg3);border-radius:3px;border:1px solid var(--border)">не в профиле</span>'}${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
       </div>
     </div>
     <div class="section-title">📝 О себе</div>
@@ -1140,7 +1288,7 @@ async function sendComment() {
 async function deleteComment(id) {
   try {
     await api('/comments/' + id, { method:'DELETE' });
-    curProfile.comments = curProfile.comments.filter(x=>x.id!==id);
+    curProfile.comments = curProfile.comments.filter(x => x.id !== id);
     renderProfileModal();
     toast('Удалено', 'ok');
   } catch (e) { toast(e.message, 'err'); }
@@ -1169,21 +1317,65 @@ function adminEditProfile(id) {
       <div class="fgroup"><label class="flabel">Теги</label><input class="finput" id="epTags" value="${esc((p.tags||[]).join(', '))}"></div>
     </div>
     <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="epBio">${esc(p.bio||'')}</textarea></div>
+
+    <!-- Статус анкеты -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--white)">🥷 Анонимная анкета</div>
+          <div style="font-size:11px;color:var(--muted)">Скрыть имя автора от других</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="epAnon" ${p.anon?'checked':''} onchange="updateEditHints()"><span class="slider"></span></label>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--white)">👤 Показать в профиле</div>
+          <div style="font-size:11px;color:var(--muted)">Анкета отображается на странице профиля</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="epShowInProfile" ${p.showInProfile?'checked':''} onchange="updateEditHints()"><span class="slider"></span></label>
+      </div>
+      <div id="epStatusHint" style="font-size:12px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--border);color:var(--muted);background:var(--bg3)"></div>
+    </div>
+
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" onclick="submitEditProfile(${p.id})">Сохранить</button>
       <button class="btn btn-secondary" onclick="openProfile(${p.id})">Отмена</button>
     </div>`;
+  // Инициализируем подсказку
+  updateEditHints();
+}
+
+function updateEditHints() {
+  const anon = document.getElementById('epAnon')?.checked;
+  const show = document.getElementById('epShowInProfile')?.checked;
+  const hint = document.getElementById('epStatusHint');
+  if (!hint) return;
+  if (anon && show) {
+    hint.style.borderColor = 'var(--yellow)'; hint.style.color = 'var(--yellow)'; hint.style.background = '#faa61a10';
+    hint.textContent = '⚠️ Анкета анонимная, но будет видна в профиле без имени автора';
+  } else if (anon && !show) {
+    hint.style.borderColor = '#5865f240'; hint.style.color = 'var(--accent2)'; hint.style.background = '#5865f210';
+    hint.textContent = '🥷 Анкета полностью анонимная — не привязана к профилю';
+  } else if (!anon && show) {
+    hint.style.borderColor = 'var(--green)'; hint.style.background = '#3ba55d10'; hint.style.color = 'var(--green)';
+    hint.textContent = '✓ Анкета публичная — автор виден, отображается в профиле';
+  } else {
+    hint.style.borderColor = 'var(--border)'; hint.style.background = 'var(--bg3)'; hint.style.color = 'var(--muted)';
+    hint.textContent = 'Анкета публичная, но не отображается в профиле';
+  }
 }
 
 async function submitEditProfile(id) {
   try {
     await api('/profiles/' + id, { method:'PATCH', body:{
-      name: document.getElementById('epName').value.trim(),
-      age: +document.getElementById('epAge').value || null,
-      emoji: document.getElementById('epEmoji').value.trim() || '👤',
-      color: document.getElementById('epColor').value,
-      tags: document.getElementById('epTags').value.split(',').map(s=>s.trim()).filter(Boolean),
-      bio: document.getElementById('epBio').value.trim()
+      name:          document.getElementById('epName').value.trim(),
+      age:           +document.getElementById('epAge').value || null,
+      emoji:         document.getElementById('epEmoji').value.trim() || '👤',
+      color:         document.getElementById('epColor').value,
+      tags:          document.getElementById('epTags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      bio:           document.getElementById('epBio').value.trim(),
+      anon:          document.getElementById('epAnon')?.checked || false,
+      showInProfile: document.getElementById('epShowInProfile')?.checked ?? true,
     } });
     toast('Сохранено', 'ok');
     await loadProfiles();
@@ -1276,15 +1468,24 @@ function renderTopicModal() {
   </div>` : '';
 
   const posts = (curTopic.posts || []).map(p => {
-    const canDel = curUser && (p.user_id === curUser.id || isMod());
+    const canDel = curUser && (p.userId === curUser.id || isMod());
+    const isAnon = !!p.isAnonMode;
+    const avHtml = isAnon
+      ? `<div class="tp-av" style="background:#ed424520;font-size:20px">🛡️</div>`
+      : p.userAvatar
+        ? `<img src="${esc(p.userAvatar)}" class="avatar-img" style="width:52px;height:52px;margin:0 auto 6px;border-radius:50%;object-fit:cover" onerror="this.outerHTML='<div class=\\'tp-av\\'>${esc(p.userEmoji||'👤')}</div>'">`
+        : `<div class="tp-av">${esc(p.userEmoji||'👤')}</div>`;
+    const nameHtml = isAnon
+      ? `<div class="tp-username" style="color:var(--red)">Анонимный<br>администратор</div>`
+      : `<div class="tp-username"><span class="author-link" onclick="openUserProfile(${p.userId})">${esc(p.author)}</span></div>`;
     return `<div class="thread-post">
       <div class="tp-head">
         <div class="tp-sidebar">
-          ${p.user_avatar?`<img src="${esc(p.user_avatar)}" class="avatar-img" style="width:52px;height:52px;margin:0 auto 6px">`:`<div class="tp-av">👤</div>`}
-          <div class="tp-username"><span class="author-link" onclick="openUserProfile(${p.user_id})">${esc(p.author)}</span></div>
+          ${avHtml}
+          ${nameHtml}
         </div>
         <div class="tp-body">
-          <div class="tp-meta">${timeAgo(p.created_at)}</div>
+          <div class="tp-meta">${timeAgo(p.createdAt)}</div>
           ${p.text?`<div class="tp-content">${esc(p.text)}</div>`:''}
           ${p.image?`<img src="${esc(p.image)}" class="post-image" onclick="openLightbox('${esc(p.image)}')" loading="lazy">`:''}
         </div>
@@ -1424,6 +1625,13 @@ async function openUserProfile(userId) {
     renderUserProfile();
     document.getElementById('userProfileOverlay').classList.add('open');
     document.getElementById('userProfileTitle').textContent = '@' + data.user.username;
+    // Загружаем кнопку дружбы асинхронно
+    if (curUser && curUser.id !== userId) {
+      api(`/friends/status/${userId}`).then(({ status }) => {
+        const wrap = document.getElementById('friendBtnArea_' + userId);
+        if (wrap) wrap.innerHTML = friendButtonHtml(userId, status);
+      }).catch(() => {});
+    }
   } catch(e) { toast(e.message, 'err'); }
 }
 function closeUserProfile() {
@@ -1469,21 +1677,31 @@ function renderUserProfile() {
   }).join('');
 
   // Анкеты пользователя
+  const isModerator = isMod();
   const profsHtml = uprofs.length ? `
     <div class="section-title" style="padding:0 20px">📋 Анкеты (${uprofs.length})</div>
     <div style="padding:0 20px 20px">
       <div class="profiles-grid">
-        ${uprofs.map(p=>`
-          <div class="pcard" onclick="closeUserProfile();openProfile(${p.id})">
+        ${uprofs.map(p=>{
+          const statusLine = (isMe || isModerator)
+            ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">
+                ${p.anon ? '<span style="font-size:10px;color:var(--accent2)">🥷 Анонимно</span>' : '<span style="font-size:10px;color:var(--green)">👤 Публично</span>'}
+                ${p.showInProfile ? '' : '<span style="font-size:10px;color:var(--muted)">· не в профиле</span>'}
+                ${p.hidden ? '<span style="font-size:10px;color:var(--red)">· скрыта</span>' : ''}
+               </div>`
+            : '';
+          return `<div class="pcard${p.hidden?' is-hidden':''}" onclick="closeUserProfile();openProfile(${p.id})">
             <div class="pcard-top">
               <div class="pcard-av" style="background:${esc(p.color)}40">${p.avatar?`<img src="${esc(p.avatar)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`:esc(p.emoji||'👤')}</div>
               <div class="pcard-info">
                 <div class="pcard-name">${esc(p.name)}</div>
                 <div class="pcard-meta">${p.age?p.age+' лет · ':''}${timeAgo(p.createdAt)}</div>
+                ${statusLine}
               </div>
             </div>
             <div class="pcard-bio">${esc(p.bio||'')}</div>
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </div>` : '';
 
@@ -1496,7 +1714,10 @@ function renderUserProfile() {
     <div class="uprofile-head">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
         ${avHtml}
-        <div style="padding-top:10px">${editBtn}</div>
+        <div style="padding-top:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          ${editBtn}
+          ${(!isMe && curUser) ? `<div id="friendBtnArea_${u.id}"><span style="font-size:12px;color:var(--muted)">...</span></div>` : ''}
+        </div>
       </div>
       <div class="uprofile-name" style="color:${accentColor}">${esc(u.displayName)}</div>
       <div class="uprofile-handle">@${esc(u.username)} · ${roleChipHtml(u.role)}</div>
@@ -1604,10 +1825,42 @@ function openSettings() {
     <div class="fgroup"><label class="flabel">Новый пароль (мин. 6)</label><input class="finput" id="stNew" type="password"></div>
     <button class="btn btn-secondary" onclick="changePassword()">Сменить пароль</button>
     <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
-    <button class="btn btn-secondary" style="color:var(--accent)" onclick="closeSettings();openUserProfile(${u.id})">👤 Смотреть свой профиль</button>`;
+    <button class="btn btn-secondary" style="color:var(--accent)" onclick="closeSettings();openUserProfile(${u.id})">👤 Смотреть свой профиль</button>
+    ${isMod() ? `
+    <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
+    <div style="background:var(--bg3);border:1px solid ${u.anonMode?'var(--red)':'var(--border)'};border-radius:var(--r2);padding:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:${u.anonMode?'10px':'0'}">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:2px">🛡️ Режим анонимности</div>
+          <div style="font-size:11px;color:var(--muted)">Только для тебя. Твои комментарии и посты будут отображаться как «Анонимный администратор»</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="stAnonMode" ${u.anonMode?'checked':''} onchange="toggleAnonMode(this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+      ${u.anonMode?`<div style="font-size:12px;color:var(--red);background:#ed424515;border-radius:var(--r);padding:8px 10px">⚠️ Анонимность включена. Твои действия публично скрыты, но главный админ видит тебя в логах.</div>`:''}
+    </div>` : ''}
+    <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
+    <div id="tgLinkSection">
+      <h4 style="margin-bottom:10px;font-size:13px;color:var(--text2)">📱 Telegram</h4>
+      <div id="tgLinkBody"><div style="color:var(--muted);font-size:12px">Загрузка...</div></div>
+    </div>`;
   document.getElementById('settingsOverlay').classList.add('open');
+  loadTgLinkSection();
 }
 function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+
+async function toggleAnonMode(enabled) {
+  try {
+    const { user } = await api('/auth/anon-mode', { method:'POST', body:{ enabled } });
+    curUser = user;
+    // Перерисовываем настройки чтобы показать/скрыть предупреждение
+    openSettings();
+    renderHeader();
+    toast(enabled ? '🛡️ Анонимный режим включён' : 'Анонимный режим выключен', enabled?'warn':'ok');
+  } catch(e) { toast(e.message, 'err'); }
+}
 
 function uploadUserAvatar() {
   const inp = document.createElement('input');
@@ -1673,6 +1926,51 @@ async function changePassword() {
     document.getElementById('stOld').value = '';
     document.getElementById('stNew').value = '';
   } catch (e) { document.getElementById('stErr').textContent = e.message; }
+}
+
+async function loadTgLinkSection() {
+  const el = document.getElementById('tgLinkBody');
+  if (!el) return;
+  try {
+    const { linked, tgUsername, linkedAt } = await api('/auth/tg-status');
+    if (linked) {
+      el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--bg3);border-radius:var(--r);padding:10px;margin-bottom:8px">
+          <span style="font-size:20px">✅</span>
+          <div>
+            <div style="font-size:13px;color:var(--white);font-weight:600">Привязан @${esc(tgUsername||'?')}</div>
+            <div style="font-size:11px;color:var(--muted)">${linkedAt ? 'С ' + new Date(linkedAt).toLocaleDateString('ru-RU') : ''}</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="unlinkTelegram()">🔓 Отвязать</button>`;
+    } else {
+      el.innerHTML = `
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Привяжи Telegram чтобы получать уведомления о комментариях и создавать анкеты через бота.</p>
+        <button class="btn btn-primary btn-sm" onclick="linkTelegram()">📱 Привязать Telegram</button>`;
+    }
+  } catch { el.innerHTML = '<div style="color:var(--muted);font-size:12px">Бот не настроен</div>'; }
+}
+
+async function linkTelegram() {
+  try {
+    const { code, deepLink } = await api('/auth/tg-link-code', { method:'POST' });
+    const el = document.getElementById('tgLinkBody');
+    if (!el) return;
+    el.innerHTML = `
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Выбери способ привязки:</p>
+      ${deepLink ? `<a href="${esc(deepLink)}" target="_blank" class="btn btn-primary btn-sm" style="margin-bottom:8px;display:inline-flex">🤖 Открыть бота</a><br>` : ''}
+      <p style="font-size:12px;color:var(--muted);margin:8px 0">Или отправь боту команду:</p>
+      <div style="background:var(--bg3);border-radius:var(--r);padding:8px 12px;font-family:monospace;font-size:13px;color:var(--accent);margin-bottom:8px">/link ${esc(code)}</div>
+      <button class="btn btn-secondary btn-sm" onclick="loadTgLinkSection()">🔄 Проверить</button>`;
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function unlinkTelegram() {
+  try {
+    await api('/auth/tg-link', { method:'DELETE' });
+    toast('Telegram отвязан', 'ok');
+    loadTgLinkSection();
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 async function removeUserBanner() {
@@ -1771,19 +2069,33 @@ function deleteUser(id, name) {
 
 async function renderAdminProfiles() {
   await loadProfiles();
-  const rows = profiles.map(p => `<tr>
-    <td><b>${esc(p.name)}</b>${p.pinned?' 📌':''}${p.hidden?' 🙈':''}</td>
-    <td>${timeAgo(p.createdAt)}</td>
-    <td><div class="td-actions">
-      <button class="act-btn" onclick="adminEditProfile(${p.id});closeAdmin()">✏️</button>
-      <button class="act-btn y" onclick="quickTogglePin(${p.id})">📌</button>
-      <button class="act-btn y" onclick="quickToggleHide(${p.id})">${p.hidden?'👁':'🙈'}</button>
-      <button class="act-btn d" onclick="quickDeleteProfile(${p.id})">🗑️</button>
-    </div></td>
-  </tr>`).join('');
-  document.getElementById('adminTabBody').innerHTML = profiles.length ?
-    `<div class="atable-wrap"><table class="atable">
-      <thead><tr><th>Имя</th><th>Создана</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></div>`
+  // Для админа запрашиваем список с реальными owner_id — используем _ownerId
+  const rows = profiles.map(p => {
+    const statusBadges = [
+      p.anon        ? '<span style="background:#5865f220;color:var(--accent2);border:1px solid #5865f240;font-size:10px;padding:1px 5px;border-radius:3px">🥷 АНОН</span>'   : '<span style="background:#3ba55d20;color:var(--green);border:1px solid #3ba55d40;font-size:10px;padding:1px 5px;border-radius:3px">👤 ПУБЛ</span>',
+      p.showInProfile ? '<span style="background:#5865f220;color:var(--accent2);border:1px solid #5865f240;font-size:10px;padding:1px 5px;border-radius:3px">📋 В профиле</span>' : '<span style="font-size:10px;color:var(--muted);padding:1px 5px;background:var(--bg3);border-radius:3px;border:1px solid var(--border)">скрыта из профиля</span>',
+    ].join(' ');
+    // _ownerId — реальный автор (всегда хранится в БД, виден только в adminPanel)
+    const realAuthor = p._ownerId ? `<br><span style="color:var(--muted);font-size:11px">👤 owner_id: ${p._ownerId}${p.authorName?' ('+esc(p.authorName)+')':''}</span>` : '<br><span style="color:var(--muted);font-size:11px">Автор удалён</span>';
+    return `<tr>
+      <td>
+        <b>${esc(p.name)}</b>${p.pinned?' 📌':''}${p.hidden?' 🙈':''}
+        ${realAuthor}
+        <div style="margin-top:3px">${statusBadges}</div>
+      </td>
+      <td>${timeAgo(p.createdAt)}</td>
+      <td><div class="td-actions">
+        <button class="act-btn" onclick="adminEditProfile(${p.id});closeAdmin()">✏️</button>
+        <button class="act-btn y" onclick="quickTogglePin(${p.id})">📌</button>
+        <button class="act-btn y" onclick="quickToggleHide(${p.id})">${p.hidden?'👁':'🙈'}</button>
+        <button class="act-btn d" onclick="quickDeleteProfile(${p.id})">🗑️</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('adminTabBody').innerHTML = profiles.length
+    ? `<div class="atable-wrap"><table class="atable">
+        <thead><tr><th>Имя / автор / статус</th><th>Создана</th><th>Действия</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`
     : '<div class="empty-state">Анкет нет</div>';
 }
 
@@ -1808,15 +2120,22 @@ async function renderAdminTopics() {
 async function renderAdminAudit() {
   try {
     const { log } = await api('/audit');
-    const rows = log.map(l => `<tr>
-      <td>${timeAgo(l.created_at)}</td>
-      <td>@${esc(l.actor_name)}</td>
-      <td><b>${esc(l.action)}</b></td>
-      <td>${esc(l.target||'')}</td>
-    </tr>`).join('');
-    document.getElementById('adminTabBody').innerHTML = log.length ?
-      `<div class="atable-wrap"><table class="atable">
-        <thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Цель</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    const rows = log.map(l => {
+      // Если действие было в анон-режиме — показываем реальное имя красным
+      const actorHtml = l.is_anon_mode
+        ? `<span style="color:var(--red)">🛡️ ${esc(l.real_name||l.actor_name)}</span><br><span style="color:var(--muted);font-size:10px">в анон-режиме</span>`
+        : `@${esc(l.actor_name)}`;
+      return `<tr>
+        <td>${timeAgo(l.created_at)}</td>
+        <td>${actorHtml}</td>
+        <td><b>${esc(l.action)}</b></td>
+        <td style="max-width:200px;word-break:break-word">${esc(l.target||'')}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('adminTabBody').innerHTML = log.length
+      ? `<div class="atable-wrap"><table class="atable">
+          <thead><tr><th>Когда</th><th>Кто (реальное имя)</th><th>Действие</th><th>Цель</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`
       : '<div class="empty-state">Лог пуст</div>';
   } catch (e) { document.getElementById('adminTabBody').innerHTML = '<div class="empty-state">Ошибка</div>'; }
 }
@@ -1860,13 +2179,7 @@ function openSiteEditor() {
       <div class="fgroup"><label class="flabel">Цвет акцента</label><input class="finput" id="seAccent" type="color" value="${esc(s.accent||'#e8632a')}" style="height:36px"></div>
     </div>
     <div class="fgroup"><label class="flabel">Приветствие в сайдбаре</label><textarea class="ftextarea" id="seWelcome">${esc(s.welcome)}</textarea></div>
-    <div class="fgroup">
-      <label class="switch">
-        <input type="checkbox" id="seAnon" ${s.adminAnon?'checked':''}>
-        <span class="slider"></span>
-        <span>Режим анонимности для админов (показываться как «Анонимный админ»)</span>
-      </label>
-    </div>
+    <p style="font-size:12px;color:var(--muted)">💡 Анонимный режим каждый модератор/админ настраивает у себя в настройках профиля.</p>
     <button class="btn btn-primary" onclick="saveSiteSettings()">Сохранить</button>`;
   document.getElementById('siteEditorOverlay').classList.add('open');
 }
@@ -1876,9 +2189,8 @@ async function saveSiteSettings() {
   try {
     await api('/settings', { method:'PATCH', body:{
       siteName: document.getElementById('seName').value.trim() || 'ANKETA.FORUM',
-      accent: document.getElementById('seAccent').value,
-      welcome: document.getElementById('seWelcome').value.trim(),
-      adminAnon: document.getElementById('seAnon').checked
+      accent:   document.getElementById('seAccent').value,
+      welcome:  document.getElementById('seWelcome').value.trim(),
     } });
     await loadSettings();
     renderHeader();
@@ -2054,9 +2366,239 @@ function socketJoinTopic(id)   { if (socket) socket.emit('join:topic', id); }
 function socketLeaveTopic(id)  { if (socket) socket.emit('leave:topic', id); }
 
 // ════════════════════════════════════════════════════════════════════
+//  FRIENDS SYSTEM
+// ════════════════════════════════════════════════════════════════════
+let pendingFriendRequests = 0; // счётчик входящих заявок
+
+function friendAvHtml(u, size='38px') {
+  if (u.avatar) return `<div class="friend-av" style="width:${size};height:${size}"><img src="${esc(u.avatar)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px">${esc(u.emoji||'👤')}</div></div>`;
+  return `<div class="friend-av" style="width:${size};height:${size}">${esc(u.emoji||'👤')}</div>`;
+}
+
+// Кнопка управления дружбой — показывается в профиле пользователя
+async function renderFriendButton(userId) {
+  if (!curUser || curUser.id === userId) return '';
+  try {
+    const { status } = await api(`/friends/status/${userId}`);
+    return friendButtonHtml(userId, status);
+  } catch { return ''; }
+}
+
+function friendButtonHtml(userId, status) {
+  switch(status) {
+    case 'none':
+      return `<button class="friend-btn friend-btn-add" onclick="friendAction('request',${userId})">➕ Добавить в друзья</button>`;
+    case 'pending_sent':
+      return `<button class="friend-btn friend-btn-pending" onclick="friendAction('cancel',${userId})">⏳ Заявка отправлена · Отменить</button>`;
+    case 'pending_received':
+      return `<div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="friend-btn friend-btn-accept" onclick="friendAction('accept',${userId})">✓ Принять заявку</button>
+        <button class="friend-btn" style="background:var(--card2);border:1px solid var(--border);color:var(--text2)" onclick="friendAction('decline',${userId})">✕ Отклонить</button>
+      </div>`;
+    case 'friends':
+      return `<div class="friend-actions-drop" id="fad_${userId}">
+        <button class="friend-btn friend-btn-friends" onclick="toggleFriendMenu(${userId})">✓ В друзьях ▾</button>
+        <div class="friend-actions-menu" id="fam_${userId}">
+          <button class="friend-menu-item" onclick="closeFriendMenu(${userId});openUserProfile(${userId})">👤 Профиль</button>
+          <button class="friend-menu-item red" onclick="closeFriendMenu(${userId});friendAction('remove',${userId})">👎 Удалить из друзей</button>
+          <button class="friend-menu-item red" onclick="closeFriendMenu(${userId});friendAction('block',${userId})">🚫 Заблокировать</button>
+        </div>
+      </div>`;
+    case 'blocked_by_me':
+      return `<button class="friend-btn friend-btn-blocked" onclick="friendAction('unblock',${userId})">🚫 Заблокирован · Разблокировать</button>`;
+    case 'blocked_by_them':
+      return `<button class="friend-btn friend-btn-blocked" disabled>🚫 Недоступно</button>`;
+    default: return '';
+  }
+}
+
+function toggleFriendMenu(uid) {
+  const m = document.getElementById('fam_'+uid);
+  if (!m) return;
+  m.classList.toggle('open');
+  document.addEventListener('click', function closer(e) {
+    if (!e.target.closest('#fad_'+uid)) { m.classList.remove('open'); document.removeEventListener('click',closer); }
+  });
+}
+function closeFriendMenu(uid) { document.getElementById('fam_'+uid)?.classList.remove('open'); }
+
+async function friendAction(action, userId) {
+  const METHODS = { request:'POST', cancel:'POST', accept:'POST', decline:'POST', remove:'DELETE', block:'POST', unblock:'POST' };
+  const PATHS   = { request:`/friends/request/${userId}`, cancel:`/friends/cancel/${userId}`, accept:`/friends/accept/${userId}`, decline:`/friends/decline/${userId}`, remove:`/friends/${userId}`, block:`/friends/block/${userId}`, unblock:`/friends/unblock/${userId}` };
+  try {
+    const { status } = await api(PATHS[action], { method: METHODS[action] });
+    toast(
+      action==='request' ? 'Заявка отправлена' :
+      action==='accept'  ? '✓ Вы теперь друзья!' :
+      action==='decline' ? 'Заявка отклонена' :
+      action==='cancel'  ? 'Заявка отменена' :
+      action==='remove'  ? 'Удалён из друзей' :
+      action==='block'   ? 'Пользователь заблокирован' :
+      action==='unblock' ? 'Разблокирован' : 'Готово',
+      action==='accept' ? 'ok' : ''
+    );
+    // Обновляем кнопку в открытом профиле
+    const btn = document.getElementById('friendBtnWrap_'+userId);
+    if (btn) btn.innerHTML = friendButtonHtml(userId, status);
+    // Обновляем счётчик если принял/отклонил
+    if (action==='accept'||action==='decline') loadFriendRequestCount();
+  } catch(e) { toast(e.message,'err'); }
+}
+
+// Загрузить счётчик входящих заявок
+async function loadFriendRequestCount() {
+  if (!curUser) return;
+  try {
+    const { requests } = await api('/friends/requests/incoming');
+    pendingFriendRequests = requests.length;
+    const dot  = document.getElementById('friendsNotifDot');
+    const badge = document.getElementById('hdrFriendsBadge');
+    if (dot)  { dot.classList.toggle('show', pendingFriendRequests > 0); }
+    if (badge) { badge.style.display = pendingFriendRequests>0?'':'none'; badge.textContent = pendingFriendRequests; }
+  } catch {}
+}
+
+// ── Модал «Мои друзья» ────────────────────────────────────────────
+let friendsTab = 'friends';
+
+async function openFriendsModal() {
+  if (!curUser) return;
+  document.getElementById('friendsOverlay').classList.add('open');
+  await renderFriendsModal();
+}
+
+async function renderFriendsModal() {
+  const tabs = [
+    ['friends','👥 Друзья'],
+    ['incoming','📩 Заявки'],
+    ['outgoing','📤 Исходящие'],
+    ['blocked','🚫 Блокировки'],
+    ['privacy','⚙ Приватность'],
+  ];
+  const tabBar = `<div class="atabs" style="margin-bottom:14px">
+    ${tabs.map(([k,l])=>`<button class="atab2${friendsTab===k?' active':''}" onclick="friendsTab='${k}';renderFriendsModal()">${l}${k==='incoming'&&pendingFriendRequests>0?` <span class="friend-badge-count">${pendingFriendRequests}</span>`:''}</button>`).join('')}
+  </div>`;
+
+  let content = '<div style="color:var(--muted);text-align:center;padding:24px">Загрузка...</div>';
+  document.getElementById('friendsBody').innerHTML = tabBar + content;
+
+  try {
+    if (friendsTab === 'friends') {
+      const { friends, hidden } = await api(`/friends/${curUser.id}`);
+      if (hidden) { content = '<div class="empty-state">Список друзей скрыт</div>'; }
+      else if (!friends.length) { content = '<div class="empty-state"><div class="icon">👥</div><h3>Друзей пока нет</h3><div>Добавь первого — зайди в профиль пользователя</div></div>'; }
+      else {
+        content = `<div class="friends-list">${friends.map(u=>`
+          <div class="friend-row" onclick="document.getElementById('friendsOverlay').classList.remove('open');openUserProfile(${u.id})">
+            ${friendAvHtml(u)}
+            <div class="friend-info">
+              <div class="friend-name">${esc(u.displayName)}</div>
+              <div class="friend-sub">@${esc(u.username)} · в друзьях с ${new Date(u.friendSince).toLocaleDateString('ru-RU')}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="flex-shrink:0" onclick="event.stopPropagation();friendAction('remove',${u.id}).then(()=>renderFriendsModal())">Удалить</button>
+          </div>`).join('')}</div>`;
+      }
+    }
+    else if (friendsTab === 'incoming') {
+      const { requests } = await api('/friends/requests/incoming');
+      if (!requests.length) { content = '<div class="empty-state"><div class="icon">📩</div><h3>Входящих заявок нет</h3></div>'; }
+      else {
+        content = `<div class="friends-list">${requests.map(u=>`
+          <div class="friend-row">
+            ${friendAvHtml(u)}
+            <div class="friend-info">
+              <div class="friend-name">${esc(u.displayName)}</div>
+              <div class="friend-sub">@${esc(u.username)} · ${timeAgo(u.requestAt)}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-primary btn-sm" onclick="friendAction('accept',${u.id}).then(()=>renderFriendsModal())">✓</button>
+              <button class="btn btn-secondary btn-sm" onclick="friendAction('decline',${u.id}).then(()=>renderFriendsModal())">✕</button>
+            </div>
+          </div>`).join('')}</div>`;
+      }
+    }
+    else if (friendsTab === 'outgoing') {
+      const { requests } = await api('/friends/requests/outgoing');
+      if (!requests.length) { content = '<div class="empty-state"><div class="icon">📤</div><h3>Исходящих заявок нет</h3></div>'; }
+      else {
+        content = `<div class="friends-list">${requests.map(u=>`
+          <div class="friend-row">
+            ${friendAvHtml(u)}
+            <div class="friend-info">
+              <div class="friend-name">${esc(u.displayName)}</div>
+              <div class="friend-sub">@${esc(u.username)} · ${timeAgo(u.requestAt)}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="flex-shrink:0" onclick="friendAction('cancel',${u.id}).then(()=>renderFriendsModal())">Отменить</button>
+          </div>`).join('')}</div>`;
+      }
+    }
+    else if (friendsTab === 'blocked') {
+      const { blocked } = await api('/friends/blocked/list');
+      if (!blocked.length) { content = '<div class="empty-state"><div class="icon">🚫</div><h3>Список пуст</h3></div>'; }
+      else {
+        content = `<div class="friends-list">${blocked.map(u=>`
+          <div class="friend-row">
+            ${friendAvHtml(u)}
+            <div class="friend-info">
+              <div class="friend-name">${esc(u.displayName)}</div>
+              <div class="friend-sub">@${esc(u.username)}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="flex-shrink:0;color:var(--green)" onclick="friendAction('unblock',${u.id}).then(()=>renderFriendsModal())">Разблокировать</button>
+          </div>`).join('')}</div>`;
+      }
+    }
+    else if (friendsTab === 'privacy') {
+      const privacy = curUser.friendsPrivacy || 'all';
+      content = `
+        <div style="margin-bottom:16px">
+          <div class="flabel" style="margin-bottom:8px">Кто видит список моих друзей</div>
+          ${[['all','🌐 Все пользователи'],['friends','👥 Только друзья'],['none','🔒 Никто (скрыт)']].map(([v,l])=>`
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${privacy===v?'var(--card2)':'var(--bg3)'};border:1px solid ${privacy===v?'var(--accent)':'var(--border)'};border-radius:var(--r);margin-bottom:6px;cursor:pointer">
+              <input type="radio" name="fprivacy" value="${v}" ${privacy===v?'checked':''} style="accent-color:var(--accent)">
+              <span style="font-size:13px;color:var(--white)">${l}</span>
+            </label>`).join('')}
+          <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="saveFriendsPrivacy()">Сохранить</button>
+        </div>`;
+    }
+  } catch(e) { content = `<div class="empty-state">Ошибка: ${esc(e.message)}</div>`; }
+
+  document.getElementById('friendsBody').innerHTML = tabBar + content;
+}
+
+async function saveFriendsPrivacy() {
+  const sel = document.querySelector('input[name="fprivacy"]:checked');
+  if (!sel) return;
+  try {
+    await api('/friends/privacy', { method:'PATCH', body:{ privacy: sel.value } });
+    curUser.friendsPrivacy = sel.value;
+    toast('Приватность обновлена', 'ok');
+    renderFriendsModal();
+  } catch(e) { toast(e.message,'err'); }
+}
+
+// ── Socket.io события друзей ──────────────────────────────────────
+function initFriendSockets() {
+  if (!socket) return;
+  socket.on('friend:request', ({ user: u }) => {
+    pendingFriendRequests++;
+    const dot  = document.getElementById('friendsNotifDot');
+    const badge = document.getElementById('hdrFriendsBadge');
+    if (dot) dot.classList.add('show');
+    if (badge) { badge.style.display=''; badge.textContent=pendingFriendRequests; }
+    toast(`📩 ${esc(u.displayName)} хочет добавить тебя в друзья`, 'ok');
+  });
+  socket.on('friend:accepted', ({ user: u }) => {
+    toast(`✓ ${esc(u.displayName)} принял(а) заявку в друзья!`, 'ok');
+  });
+  socket.on('friend:removed', () => {
+    loadFriendRequestCount();
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════════════════════════
-loadAll().then(() => initSocket());
+loadAll().then(() => { initSocket(); initFriendSockets(); if (curUser) loadFriendRequestCount(); });
 </script>
 </body>
 </html>
