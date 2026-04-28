@@ -8,3 +8,4 @@ db.sqlite-shm
 *.sqlite
 backups/
 public/uploads/
+package-lock.json
