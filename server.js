@@ -48,6 +48,24 @@ for (const d of Object.values(DIRS)) fs.mkdirSync(d, { recursive: true });
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
+
+// ── AUTO BACKUP ─────────────────────────────────────────────────────
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(path.dirname(DB_PATH), 'backups');
+fs.mkdirSync(BACKUP_DIR, { recursive: true });
+function makeBackup() {
+  const name = `backup_${new Date().toISOString().replace(/[:.]/g,'-')}.sqlite`;
+  db.backup(path.join(BACKUP_DIR, name))
+    .then(() => {
+      console.log('✓ Бекап создан:', name);
+      const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.sqlite')).sort();
+      if (files.length > 5) files.slice(0, files.length - 5).forEach(f => {
+        try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch {}
+      });
+    })
+    .catch(e => console.error('Бекап ошибка:', e));
+}
+makeBackup();
+setInterval(makeBackup, 6 * 60 * 60 * 1000);
 db.pragma('foreign_keys = ON');
 
 // ── SAFE DB BACKUP BEFORE MIGRATIONS ───────────────────────────────
@@ -1168,12 +1186,6 @@ app.get('/api/audit', requireAdmin, (req,res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use((err,_req,res,_next) => { console.error(err); res.status(500).json({error:'Внутренняя ошибка'}); });
 
-app.post('/admin/restore-db', express.raw({type: '*/*', limit: '100mb'}), (req, res) => {
-  const secret = req.headers['x-secret'];
-  if (secret !== 'glom1488glom') return res.status(403).send('forbidden');
-  fs.writeFileSync(DB_PATH, req.body);
-  res.send('ok');
-});
 
 server.listen(PORT, () => {
   console.log(`✓ Сервер: http://localhost:${PORT}`);
