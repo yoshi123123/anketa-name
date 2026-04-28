@@ -2431,6 +2431,18 @@ function socketLeaveTopic(id)  { if (socket) socket.emit('leave:topic', id); }
 //  FRIENDS SYSTEM
 // ════════════════════════════════════════════════════════════════════
 let pendingFriendRequests = 0; // счётчик входящих заявок
+let unreadDmCount = 0; // счётчик непрочитанных сообщений
+
+function updateNotifBadges() {
+  const total = pendingFriendRequests + unreadDmCount;
+  const dot = document.getElementById('friendsNotifDot');
+  const badge = document.getElementById('hdrFriendsBadge');
+  if (dot) dot.classList.toggle('show', total > 0);
+  if (badge) {
+    badge.style.display = total > 0 ? '' : 'none';
+    badge.textContent = total;
+  }
+}
 
 function friendAvHtml(u, size='38px') {
   if (u.avatar) return `<div class="friend-av" style="width:${size};height:${size}"><img src="${esc(u.avatar)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px">${esc(u.emoji||'👤')}</div></div>`;
@@ -2514,10 +2526,12 @@ async function loadFriendRequestCount() {
   try {
     const { requests } = await api('/friends/requests/incoming');
     pendingFriendRequests = requests.length;
-    const dot  = document.getElementById('friendsNotifDot');
-    const badge = document.getElementById('hdrFriendsBadge');
-    if (dot)  { dot.classList.toggle('show', pendingFriendRequests > 0); }
-    if (badge) { badge.style.display = pendingFriendRequests>0?'':'none'; badge.textContent = pendingFriendRequests; }
+    // Также грузим количество непрочитанных DM
+    try {
+      const { unread } = await api('/dm/unread-count');
+      unreadDmCount = unread;
+    } catch {}
+    updateNotifBadges();
   } catch {}
 }
 
@@ -2678,6 +2692,12 @@ async function openDmChat(userId) {
   const { messages } = await api(`/dm/${userId}`);
   renderDmMessages(messages);
   document.getElementById('dmInput').focus();
+  // Обновляем счётчик непрочитанных после прочтения
+  try {
+    const { unread } = await api('/dm/unread-count');
+    unreadDmCount = unread;
+    updateNotifBadges();
+  } catch {}
 }
 function renderDmMessages(msgs) {
   const el = document.getElementById('dmMessages');
@@ -2741,10 +2761,7 @@ function initFriendSockets() {
   if (!socket) return;
   socket.on('friend:request', ({ user: u }) => {
     pendingFriendRequests++;
-    const dot  = document.getElementById('friendsNotifDot');
-    const badge = document.getElementById('hdrFriendsBadge');
-    if (dot) dot.classList.add('show');
-    if (badge) { badge.style.display=''; badge.textContent=pendingFriendRequests; }
+    updateNotifBadges();
     toast(`📩 ${esc(u.displayName)} хочет добавить тебя в друзья`, 'ok');
   });
   socket.on('friend:accepted', ({ user: u }) => {
@@ -2754,9 +2771,13 @@ function initFriendSockets() {
     loadFriendRequestCount();
   });
   socket.on('dm:message', (msg) => {
-    if (document.getElementById('dmOverlay').classList.contains('open') && (msg.from_id === dmUserId || msg.to_id === dmUserId)) {
+    const isOpen = document.getElementById('dmOverlay').classList.contains('open');
+    const isMine = msg.from_id === curUser?.id;
+    const isCurrentChat = isOpen && (msg.from_id === dmUserId || msg.to_id === dmUserId);
+    
+    if (isCurrentChat) {
       const el = document.getElementById('dmMessages');
-      const mine = msg.from_id === curUser?.id;
+      const mine = isMine;
       const av = msg.avatar ? `<img src="${esc(msg.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${esc(msg.emoji||'👤')}</div>`;
       el.insertAdjacentHTML('beforeend', `<div style="display:flex;gap:8px;align-items:flex-end;${mine?'flex-direction:row-reverse':''}">
         ${av}
@@ -2767,7 +2788,10 @@ function initFriendSockets() {
       </div>`);
       el.scrollTop = el.scrollHeight;
       if (!mine) api(`/dm/${msg.from_id}`); // mark as read
-    } else if (!document.getElementById('dmOverlay').classList.contains('open') && msg.from_id !== curUser?.id) {
+    } else if (!isMine) {
+      // Сообщение от другого пользователя — увеличиваем счётчик
+      unreadDmCount++;
+      updateNotifBadges();
       toast(`💬 ${esc(msg.display_name||msg.username)}: ${esc(msg.text.slice(0,40))}`);
     }
   });

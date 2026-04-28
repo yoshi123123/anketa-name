@@ -1201,6 +1201,12 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // ── DIRECT MESSAGES ─────────────────────────────────────────────────
+app.get('/api/dm/unread-count', requireAuth, (req, res) => {
+  const me = req.user.id;
+  const row = db.prepare('SELECT COUNT(*) c FROM dm_messages WHERE to_id=? AND read_at IS NULL').get(me);
+  res.json({ unread: row.c || 0 });
+});
+
 app.get('/api/dm/conversations', requireAuth, (req, res) => {
   const me = req.user.id;
   const rows = db.prepare(`
