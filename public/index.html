@@ -1648,6 +1648,11 @@ async function openUserProfile(userId) {
       api(`/friends/status/${userId}`).then(({ status }) => {
         const wrap = document.getElementById('friendBtnArea_' + userId);
         if (wrap) wrap.innerHTML = friendButtonHtml(userId, status);
+        // Если друзья — показываем кнопку написать
+        if (status === 'friends') {
+          const dmWrap = document.getElementById('dmBtnArea_' + userId);
+          if (dmWrap) dmWrap.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="openDmChat(${userId})">💬 Написать</button>`;
+        }
       }).catch(() => {});
     }
   } catch(e) { toast(e.message, 'err'); }
@@ -1734,7 +1739,8 @@ function renderUserProfile() {
         ${avHtml}
         <div style="padding-top:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
           ${editBtn}
-          ${(!isMe && curUser) ? `<div id="friendBtnArea_${u.id}"><span style="font-size:12px;color:var(--muted)">...</span></div>` : ''}
+          ${(!isMe && curUser) ? `<div id="friendBtnArea_${u.id}"><span style="font-size:12px;color:var(--muted)">...</span></div>
+          <div id="dmBtnArea_${u.id}"></div>` : ''}
         </div>
       </div>
       <div class="uprofile-name" style="color:${accentColor}">${esc(u.displayName)}</div>
@@ -2625,9 +2631,13 @@ async function openDmChat(userId) {
   dmUserId = userId;
   document.getElementById('friendsOverlay').classList.remove('open');
   document.getElementById('dmOverlay').classList.add('open');
+  document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">Загрузка...</div>';
+  // Получаем имя пользователя
+  try {
+    const { user } = await api(`/users/${userId}/public`);
+    document.getElementById('dmTitle').textContent = '💬 ' + esc(user.displayName || user.username);
+  } catch {}
   const { messages } = await api(`/dm/${userId}`);
-  const other = messages.find(m => m.from_id === userId);
-  document.getElementById('dmTitle').textContent = '💬 ' + (other ? esc(other.display_name || other.username) : 'Чат');
   renderDmMessages(messages);
   document.getElementById('dmInput').focus();
 }

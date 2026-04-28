@@ -1195,7 +1195,10 @@ app.get('/api/audit', requireAdmin, (req,res) => {
 
 // ── STATIC ─────────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
+// Отдаём uploads из UPLOADS_DIR (на Railway это /data/uploads)
 app.use('/uploads', express.static(UPLOADS_DIR));
+// Fallback — отдаём из public/uploads если файл там
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // ── DIRECT MESSAGES ─────────────────────────────────────────────────
 app.get('/api/dm/conversations', requireAuth, (req, res) => {
