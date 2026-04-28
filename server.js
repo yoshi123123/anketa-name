@@ -587,7 +587,8 @@ app.get('/api/users', requireMod, (req,res) =>
   res.json({ users: db.prepare('SELECT * FROM users ORDER BY created_at DESC').all().map(publicUser) }));
 
 app.get('/api/users/search', (req, res) => {
-  const q = (req.query.q || '').trim();
+  let q = (req.query.q || '').trim();
+  if (q.startsWith('@')) q = q.slice(1).trim();
   if (!q || q.length < 2) return res.json([]);
   const pattern = `%${q}%`;
   const users = db.prepare(`SELECT * FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND banned=0 LIMIT 20`).all(pattern, pattern);
