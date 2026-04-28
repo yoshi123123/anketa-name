@@ -969,6 +969,11 @@ function initSocket() {
   const token = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('token='))?.split('=')[1]||'';
   socket = io({ auth:{token}, reconnectionDelay:1000 });
 
+  socket.on('connect', () => {
+    if (curProfile) socketJoin('profile', curProfile.profile.id);
+    if (curTopic) socketJoin('topic', curTopic.topic.id);
+  });
+
   socket.on('profile:created', p => { if(!profiles.find(x=>x.id===p.id)){profiles.unshift(p);if(curPage==='home')render();} });
   socket.on('profile:updated', p => { const i=profiles.findIndex(x=>x.id===p.id); if(i>=0)profiles[i]=p; else profiles.unshift(p); if(curPage==='home')render(); if(curProfile?.profile.id===p.id){curProfile.profile=p;renderProfileSheet();} });
   socket.on('profile:deleted', ({id}) => { profiles=profiles.filter(x=>x.id!==id); if(curPage==='home')render(); if(curProfile?.profile.id===id)closeSheet('profileSheet'); });
@@ -983,7 +988,11 @@ function initSocket() {
   socket.on('settings:updated', upd => { if(upd.accent)document.documentElement.style.setProperty('--accent',upd.accent); });
 }
 
-function socketJoin(type, id) { if(socket){socket.emit('join:'+type, id);} }
+function socketJoin(type, id) {
+  if (!socket) return;
+  if (socket.connected) socket.emit('join:'+type, id);
+  else socket.once('connect', () => socket.emit('join:'+type, id));
+}
 
 function scrollCommentsDown() {
   const sb = document.getElementById('profileSheetBody');

@@ -2290,7 +2290,12 @@ function initSocket() {
   const token = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('token='))?.split('=')[1] || '';
   socket = io({ auth: { token }, reconnectionDelay: 1000, reconnectionAttempts: Infinity });
 
-  socket.on('connect', () => console.log('[ws] connected', socket.id));
+  socket.on('connect', () => {
+    console.log('[ws] connected', socket.id);
+    // При реконнекте снова вступаем в комнаты
+    if (curProfile) socketJoinProfile(curProfile.profile.id);
+    if (curTopic) socketJoinTopic(curTopic.topic.id);
+  });
   socket.on('disconnect', () => console.log('[ws] disconnected'));
 
   // Новая анкета — добавить в список без перезагрузки
@@ -2409,9 +2414,17 @@ function initSocket() {
 }
 
 // Подписываем сокет на комнату конкретной анкеты
-function socketJoinProfile(id) { if (socket) socket.emit('join:profile', id); }
+function socketJoinProfile(id) {
+  if (!socket) return;
+  if (socket.connected) socket.emit('join:profile', id);
+  else socket.once('connect', () => socket.emit('join:profile', id));
+}
 function socketLeaveProfile(id) { if (socket) socket.emit('leave:profile', id); }
-function socketJoinTopic(id)   { if (socket) socket.emit('join:topic', id); }
+function socketJoinTopic(id) {
+  if (!socket) return;
+  if (socket.connected) socket.emit('join:topic', id);
+  else socket.once('connect', () => socket.emit('join:topic', id));
+}
 function socketLeaveTopic(id)  { if (socket) socket.emit('leave:topic', id); }
 
 // ════════════════════════════════════════════════════════════════════
