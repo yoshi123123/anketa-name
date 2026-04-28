@@ -583,6 +583,14 @@ app.post('/api/tg/auth', (req,res) => {
 app.get('/api/users', requireMod, (req,res) =>
   res.json({ users: db.prepare('SELECT * FROM users ORDER BY created_at DESC').all().map(publicUser) }));
 
+app.get('/api/users/search', (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q || q.length < 2) return res.json([]);
+  const pattern = `%${q}%`;
+  const users = db.prepare(`SELECT * FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND banned=0 LIMIT 20`).all(pattern, pattern);
+  res.json(users.map(publicUser));
+});
+
 app.get('/api/users/:id/public', (req,res) => {
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(+req.params.id);
   if (!u) return res.status(404).json({error:'Не найден'});

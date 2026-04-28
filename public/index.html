@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ANKETA.FORUM</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="shortcut icon" href="/favicon.png">
 <script src="/socket.io/socket.io.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -2469,6 +2471,7 @@ async function openFriendsModal() {
 
 async function renderFriendsModal() {
   const tabs = [
+    ['search','🔍 Поиск'],
     ['friends','👥 Друзья'],
     ['incoming','📩 Заявки'],
     ['outgoing','📤 Исходящие'],
@@ -2483,7 +2486,13 @@ async function renderFriendsModal() {
   document.getElementById('friendsBody').innerHTML = tabBar + content;
 
   try {
-    if (friendsTab === 'friends') {
+    if (friendsTab === 'search') {
+      content = `<div style="margin-bottom:12px">
+        <input id="friendSearchInput" class="input" placeholder="Поиск по @юзернейму..." style="width:100%;box-sizing:border-box" oninput="debouncedFriendSearch()" autofocus>
+      </div>
+      <div id="friendSearchResults"><div class="empty-state"><div class="icon">🔍</div><h3>Введи имя пользователя</h3></div></div>`;
+    }
+    else if (friendsTab === 'friends') {
       const { friends, hidden } = await api(`/friends/${curUser.id}`);
       if (hidden) { content = '<div class="empty-state">Список друзей скрыт</div>'; }
       else if (!friends.length) { content = '<div class="empty-state"><div class="icon">👥</div><h3>Друзей пока нет</h3><div>Добавь первого — зайди в профиль пользователя</div></div>'; }
@@ -2577,6 +2586,39 @@ async function saveFriendsPrivacy() {
 }
 
 // ── Socket.io события друзей ──────────────────────────────────────
+let friendSearchTimer = null;
+function debouncedFriendSearch() {
+  clearTimeout(friendSearchTimer);
+  friendSearchTimer = setTimeout(doFriendSearch, 350);
+}
+async function doFriendSearch() {
+  const q = (document.getElementById('friendSearchInput')?.value || '').trim();
+  const res = document.getElementById('friendSearchResults');
+  if (!res) return;
+  if (!q) { res.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><h3>Введи имя пользователя</h3></div>'; return; }
+  res.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted)">Поиск...</div>';
+  try {
+    const users = await api(`/users/search?q=${encodeURIComponent(q)}`);
+    if (!users.length) { res.innerHTML = '<div class="empty-state"><div class="icon">😶</div><h3>Никого не найдено</h3></div>'; return; }
+    res.innerHTML = `<div class="friends-list">${users.map(u => `
+      <div class="friend-row" onclick="document.getElementById('friendsOverlay').classList.remove('open');openUserProfile(${u.id})">
+        ${friendAvHtml(u)}
+        <div class="friend-info">
+          <div class="friend-name">${esc(u.displayName)}</div>
+          <div class="friend-sub">@${esc(u.username)}</div>
+        </div>
+        <div id="fsBtn_${u.id}">${u.id === curUser?.id ? '' : `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();friendSearchAdd(${u.id})">➕</button>`}</div>
+      </div>`).join('')}</div>`;
+  } catch(e) { res.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; }
+}
+async function friendSearchAdd(userId) {
+  try {
+    const { status } = await friendAction('request', userId);
+    const btn = document.getElementById(`fsBtn_${userId}`);
+    if (btn) btn.innerHTML = '<span style="color:var(--green);font-size:12px">✓ Отправлено</span>';
+  } catch(e) { toast(e.message, 'err'); }
+}
+
 function initFriendSockets() {
   if (!socket) return;
   socket.on('friend:request', ({ user: u }) => {
