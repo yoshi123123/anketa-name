@@ -674,7 +674,11 @@ input,textarea,select{font-family:var(--font);outline:none}
         <div>✨ Интерактивное меню в боте</div>
       </div>
       <button id="tgPromoBtn" class="btn btn-primary btn-block" style="margin-bottom:8px;opacity:.5;pointer-events:none" onclick="connectTgFromPromo()">⏳ Подождите 5 сек...</button>
-      <button id="tgPromoLater" class="btn btn-ghost btn-block" style="display:none;color:var(--muted);font-size:12px" onclick="closeTgPromo()">Может позже</button>
+      <button id="tgPromoLater" class="btn btn-ghost btn-block" style="display:none;color:var(--muted);font-size:12px;margin-bottom:8px" onclick="closeTgPromo(false)">Может позже</button>
+      <label id="tgPromoDontShow" style="display:none;align-items:center;justify-content:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;padding:6px;user-select:none">
+        <input type="checkbox" id="tgPromoDontShowCb" style="cursor:pointer">
+        Больше не показывать
+      </label>
     </div>
   </div>
 </div>
@@ -3017,13 +3021,17 @@ loadAll().then(() => { initSocket(); initFriendSockets(); if (curUser) { loadFri
 // ── TG PROMO ──────────────────────────────────────────────────────
 async function maybeShowTgPromo() {
   if (!curUser) return;
-  // Не показываем если пользователь уже отказался
-  if (localStorage.getItem('tg_promo_dismissed') === '1') return;
+  // Не показываем если пользователь поставил галочку "не показывать больше"
+  if (localStorage.getItem('tg_promo_never') === '1') return;
   // Проверяем привязан ли уже
   try {
     const s = await api('/tg/status');
     if (!s.enabled) return; // бот не настроен
-    if (s.linked) return; // уже привязан
+    if (s.linked) {
+      // Если уже привязан - очищаем флаг (чтобы при отвязке снова показывалось)
+      localStorage.removeItem('tg_promo_never');
+      return;
+    }
   } catch { return; }
   
   // Показываем через 1.5 сек после загрузки
@@ -3031,7 +3039,15 @@ async function maybeShowTgPromo() {
     document.getElementById('tgPromoOverlay').classList.add('open');
     const btn = document.getElementById('tgPromoBtn');
     const later = document.getElementById('tgPromoLater');
+    const dontShow = document.getElementById('tgPromoDontShow');
+    const cb = document.getElementById('tgPromoDontShowCb');
+    if (cb) cb.checked = false;
     let secs = 5;
+    btn.textContent = `⏳ Подождите ${secs} сек...`;
+    btn.style.opacity = '.5';
+    btn.style.pointerEvents = 'none';
+    later.style.display = 'none';
+    dontShow.style.display = 'none';
     const timer = setInterval(() => {
       secs--;
       if (secs > 0) {
@@ -3042,25 +3058,27 @@ async function maybeShowTgPromo() {
         btn.style.opacity = '1';
         btn.style.pointerEvents = '';
         later.style.display = '';
+        dontShow.style.display = 'flex';
       }
     }, 1000);
   }, 1500);
 }
 
-function closeTgPromo() {
+function closeTgPromo(saveNever) {
   document.getElementById('tgPromoOverlay').classList.remove('open');
-  localStorage.setItem('tg_promo_dismissed', '1');
+  const cb = document.getElementById('tgPromoDontShowCb');
+  if (saveNever || (cb && cb.checked)) {
+    localStorage.setItem('tg_promo_never', '1');
+  }
 }
 
 async function connectTgFromPromo() {
-  closeTgPromo();
+  closeTgPromo(false);
   openSettings();
-  // Прокручиваем к секции Telegram через секунду
   setTimeout(() => {
     const tgSection = document.getElementById('tgLinkBody');
     if (tgSection) {
       tgSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Сразу запускаем привязку
       linkTelegram();
     }
   }, 400);
