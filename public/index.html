@@ -659,6 +659,32 @@ input,textarea,select{font-family:var(--font);outline:none}
   </div>
 </div>
 
+<!-- TG PROMO MODAL -->
+<div class="overlay" id="tgPromoOverlay" style="z-index:500">
+  <div class="modal" style="max-width:440px;text-align:center">
+    <div style="padding:24px 20px 16px">
+      <div style="font-size:54px;margin-bottom:8px;animation:tg-pulse 2s ease-in-out infinite">📱</div>
+      <h2 style="margin:0 0 6px;font-size:22px">Подключи Telegram-бота!</h2>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:18px">Ничего не пропускай — получай уведомления прямо в Telegram</div>
+      <div style="text-align:left;background:var(--card2);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;font-size:13px;line-height:1.7">
+        <div>🆕 Новые анкеты на сайте</div>
+        <div>💬 Комментарии к твоим анкетам</div>
+        <div>📩 Заявки в друзья</div>
+        <div>💌 Личные сообщения</div>
+        <div>✨ Интерактивное меню в боте</div>
+      </div>
+      <button id="tgPromoBtn" class="btn btn-primary btn-block" style="margin-bottom:8px;opacity:.5;pointer-events:none" onclick="connectTgFromPromo()">⏳ Подождите 5 сек...</button>
+      <button id="tgPromoLater" class="btn btn-ghost btn-block" style="display:none;color:var(--muted);font-size:12px" onclick="closeTgPromo()">Может позже</button>
+    </div>
+  </div>
+</div>
+<style>
+@keyframes tg-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+</style>
+
 <!-- REPORT MODAL -->
 <div class="overlay" id="reportOverlay">
   <div class="modal">
@@ -2986,7 +3012,59 @@ function initFriendSockets() {
 // ════════════════════════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════════════════════════
-loadAll().then(() => { initSocket(); initFriendSockets(); if (curUser) loadFriendRequestCount(); });
+loadAll().then(() => { initSocket(); initFriendSockets(); if (curUser) { loadFriendRequestCount(); maybeShowTgPromo(); } });
+
+// ── TG PROMO ──────────────────────────────────────────────────────
+async function maybeShowTgPromo() {
+  if (!curUser) return;
+  // Не показываем если пользователь уже отказался
+  if (localStorage.getItem('tg_promo_dismissed') === '1') return;
+  // Проверяем привязан ли уже
+  try {
+    const s = await api('/tg/status');
+    if (!s.enabled) return; // бот не настроен
+    if (s.linked) return; // уже привязан
+  } catch { return; }
+  
+  // Показываем через 1.5 сек после загрузки
+  setTimeout(() => {
+    document.getElementById('tgPromoOverlay').classList.add('open');
+    const btn = document.getElementById('tgPromoBtn');
+    const later = document.getElementById('tgPromoLater');
+    let secs = 5;
+    const timer = setInterval(() => {
+      secs--;
+      if (secs > 0) {
+        btn.textContent = `⏳ Подождите ${secs} сек...`;
+      } else {
+        clearInterval(timer);
+        btn.textContent = '🚀 Подключить Telegram';
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = '';
+        later.style.display = '';
+      }
+    }, 1000);
+  }, 1500);
+}
+
+function closeTgPromo() {
+  document.getElementById('tgPromoOverlay').classList.remove('open');
+  localStorage.setItem('tg_promo_dismissed', '1');
+}
+
+async function connectTgFromPromo() {
+  closeTgPromo();
+  openSettings();
+  // Прокручиваем к секции Telegram через секунду
+  setTimeout(() => {
+    const tgSection = document.getElementById('tgLinkBody');
+    if (tgSection) {
+      tgSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Сразу запускаем привязку
+      linkTelegram();
+    }
+  }, 400);
+}
 </script>
 </body>
 </html>

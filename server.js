@@ -67,60 +67,402 @@ let tgOffset = 0;
 async function tgPoll() {
   if (!TG_BOT_TOKEN) return;
   try {
-    const r = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?timeout=30&offset=${tgOffset}`);
+    const r = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?timeout=30&offset=${tgOffset}&allowed_updates=${encodeURIComponent(JSON.stringify(['message','callback_query']))}`);
     const data = await r.json();
     if (data.ok && data.result) {
       for (const upd of data.result) {
         tgOffset = upd.update_id + 1;
         if (upd.message) await handleTgMessage(upd.message);
+        if (upd.callback_query) await handleTgCallback(upd.callback_query);
       }
     }
   } catch(e) { console.warn('TG poll error:', e.message); await new Promise(r => setTimeout(r, 5000)); }
   setImmediate(tgPoll);
 }
 
+// Главное меню (для привязанных)
+function tgMainMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '🌐 Открыть сайт', url: SITE_URL }],
+      [{ text: '👤 Мой профиль', callback_data: 'me' }, { text: '📊 Статистика', callback_data: 'stats' }],
+      [{ text: '👥 Мои друзья', callback_data: 'friends' }, { text: '💬 Чаты', callback_data: 'chats' }],
+      [{ text: '🆕 Новые анкеты', callback_data: 'new_profiles' }],
+      [{ text: '🔔 Настройки уведомлений', callback_data: 'notif_settings' }],
+      [{ text: '❓ Помощь', callback_data: 'help' }, { text: '🔌 Отвязать', callback_data: 'unlink_confirm' }],
+    ]
+  };
+}
+
+// Меню для непривязанных
+function tgGuestMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '🌐 Открыть сайт', url: SITE_URL }],
+      [{ text: '🔐 Как привязать аккаунт?', callback_data: 'how_to_link' }],
+      [{ text: '❓ О боте', callback_data: 'about' }],
+    ]
+  };
+}
+
 async function handleTgMessage(msg) {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
-  const fromName = msg.from.first_name || msg.from.username || 'друг';
+  const firstName = msg.from.first_name || 'друг';
 
   if (text === '/start') {
-    // Проверим уже привязан ли
-    const linked = db.prepare('SELECT username, display_name FROM users WHERE tg_id=?').get(chatId);
+    const linked = db.prepare('SELECT id, username, display_name, role FROM users WHERE tg_id=?').get(chatId);
     if (linked) {
-      return tgApi('sendMessage', { chat_id: chatId, text: `Привет, ${fromName}!\n\nТы уже привязан к аккаунту <b>${linked.display_name || linked.username}</b>.\n\nЯ буду присылать уведомления о:\n• новых анкетах\n• комментариях к твоей анкете\n• сообщениях в личке\n• заявках в друзья\n\nКоманды:\n/unlink — отвязать аккаунт\n/site — открыть сайт`, parse_mode: 'HTML' });
+      const roleEmoji = linked.role === 'owner' ? '👑' : linked.role === 'admin' ? '⚙️' : linked.role === 'moderator' ? '🛡' : '';
+      return tgApi('sendMessage', {
+        chat_id: chatId,
+        text: `🎉 С возвращением, <b>${tgEsc(linked.display_name || linked.username)}</b>! ${roleEmoji}\n\n` +
+              `Я — твой персональный помощник в мире <b>ANKETA.FORUM</b>. Через меня ты узнаёшь обо всём, что происходит на сайте, не открывая его.\n\n` +
+              `Выбери что-нибудь из меню ниже 👇`,
+        parse_mode: 'HTML',
+        reply_markup: tgMainMenuKeyboard(),
+      });
     }
-    return tgApi('sendMessage', { chat_id: chatId, text: `Привет, ${fromName}! 👋\n\nЯ бот сайта <b>ANKETA.FORUM</b>. Я буду присылать тебе уведомления о новых событиях.\n\nЧтобы привязать аккаунт:\n1️⃣ Зайди на ${SITE_URL}\n2️⃣ Открой настройки → Telegram\n3️⃣ Нажми «Получить код»\n4️⃣ Пришли мне этот код сюда`, parse_mode: 'HTML' });
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: `👋 Привет, <b>${tgEsc(firstName)}</b>!\n\n` +
+            `Я — бот социалки <b>ANKETA.FORUM</b> 🎭\n\n` +
+            `На сайте ты можешь:\n` +
+            `📋 создавать анкеты — обычные или анонимные\n` +
+            `💬 общаться в форуме и личке\n` +
+            `👥 заводить друзей\n` +
+            `🥷 быть полностью анонимным\n\n` +
+            `А я буду присылать тебе уведомления, чтобы ты ничего не пропустил.\n\n` +
+            `<b>Чтобы начать — привяжи аккаунт</b> 👇`,
+      parse_mode: 'HTML',
+      reply_markup: tgGuestMenuKeyboard(),
+    });
+  }
+
+  if (text === '/menu' || text === '/help') {
+    const linked = db.prepare('SELECT id FROM users WHERE tg_id=?').get(chatId);
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: linked ? '📋 Главное меню:' : '📋 Меню:',
+      reply_markup: linked ? tgMainMenuKeyboard() : tgGuestMenuKeyboard(),
+    });
+  }
+
+  if (text === '/me') {
+    const u = db.prepare('SELECT * FROM users WHERE tg_id=?').get(chatId);
+    if (!u) return tgApi('sendMessage', { chat_id: chatId, text: 'Сначала привяжи аккаунт через /start' });
+    return sendUserProfile(chatId, u);
+  }
+
+  if (text === '/stats') {
+    return sendStats(chatId);
   }
 
   if (text === '/unlink') {
     const u = db.prepare('SELECT id, username FROM users WHERE tg_id=?').get(chatId);
-    if (!u) return tgApi('sendMessage', { chat_id: chatId, text: 'Аккаунт не привязан.' });
-    db.prepare('UPDATE users SET tg_id=NULL, tg_link_code=NULL WHERE id=?').run(u.id);
-    return tgApi('sendMessage', { chat_id: chatId, text: `✓ Аккаунт <b>${u.username}</b> отвязан. Уведомления больше не будут приходить.`, parse_mode: 'HTML' });
+    if (!u) return tgApi('sendMessage', { chat_id: chatId, text: '🤷 Аккаунт не привязан.\n\nНапиши /start' });
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: `Точно отвязать аккаунт <b>${tgEsc(u.username)}</b>?\n\nУведомления перестанут приходить.`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[
+        { text: '✅ Да, отвязать', callback_data: 'unlink_confirm' },
+        { text: '❌ Отмена', callback_data: 'cancel' },
+      ]]}
+    });
   }
 
   if (text === '/site') {
-    return tgApi('sendMessage', { chat_id: chatId, text: `🌐 ${SITE_URL}` });
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: '🌐 Открыть сайт:',
+      reply_markup: { inline_keyboard: [[{ text: '🚀 ANKETA.FORUM', url: SITE_URL }]] }
+    });
   }
 
-  // Проверяем код привязки
+  // Проверка кода привязки
   const code = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length === 6) {
     const u = db.prepare('SELECT id, username, display_name FROM users WHERE tg_link_code=?').get(code);
     if (u) {
-      // Проверим не привязан ли этот tg_id к другому
       const other = db.prepare('SELECT id, username FROM users WHERE tg_id=? AND id!=?').get(chatId, u.id);
       if (other) {
-        return tgApi('sendMessage', { chat_id: chatId, text: `⚠️ Этот Telegram уже привязан к аккаунту <b>${other.username}</b>. Сначала /unlink.`, parse_mode: 'HTML' });
+        return tgApi('sendMessage', {
+          chat_id: chatId,
+          text: `⚠️ Этот Telegram уже привязан к <b>${tgEsc(other.username)}</b>.\n\nСначала используй /unlink`,
+          parse_mode: 'HTML',
+        });
       }
       db.prepare('UPDATE users SET tg_id=?, tg_link_code=NULL WHERE id=?').run(chatId, u.id);
-      return tgApi('sendMessage', { chat_id: chatId, text: `✅ Готово! Аккаунт <b>${u.display_name || u.username}</b> привязан.\n\nТы будешь получать уведомления о новых событиях на сайте.\n\n/unlink — отвязать`, parse_mode: 'HTML' });
+      return tgApi('sendMessage', {
+        chat_id: chatId,
+        text: `🎉 <b>Готово!</b>\n\nАккаунт <b>${tgEsc(u.display_name || u.username)}</b> успешно привязан ✅\n\nТеперь ты будешь получать все уведомления:\n` +
+              `🆕 о новых анкетах\n💬 о комментариях к твоим анкетам\n📩 о заявках в друзья\n💌 о новых сообщениях\n\n` +
+              `Можешь смело сворачивать чат — я не пропаду 😉`,
+        parse_mode: 'HTML',
+        reply_markup: tgMainMenuKeyboard(),
+      });
     }
-    return tgApi('sendMessage', { chat_id: chatId, text: '❌ Неверный код или код истёк. Получи новый на сайте в Настройках.' });
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: '❌ <b>Неверный код</b>\n\nВозможно, он истёк или уже использован.\n\nПолучи новый код на сайте → Настройки → Telegram',
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '🌐 Получить новый код', url: SITE_URL }]] }
+    });
   }
 
-  return tgApi('sendMessage', { chat_id: chatId, text: 'Не понял команду. Напиши /start для инструкции.' });
+  // Случайный текст
+  return tgApi('sendMessage', {
+    chat_id: chatId,
+    text: '🤔 Не понял. Вот команды которые я знаю:\n\n/start — главное меню\n/menu — открыть меню\n/me — мой профиль\n/stats — статистика сайта\n/site — открыть сайт\n/unlink — отвязать аккаунт',
+  });
+}
+
+async function sendUserProfile(chatId, u) {
+  const profilesCount = db.prepare('SELECT COUNT(*) c FROM profiles WHERE owner_id=?').get(u.id).c;
+  const friendsCount = db.prepare("SELECT COUNT(*) c FROM friends WHERE (from_id=? OR to_id=?) AND status='accepted'").get(u.id, u.id).c;
+  const unread = db.prepare('SELECT COUNT(*) c FROM dm_messages WHERE to_id=? AND read_at IS NULL').get(u.id).c;
+  const incoming = db.prepare("SELECT COUNT(*) c FROM friends WHERE to_id=? AND status='pending'").get(u.id).c;
+  const roleLabel = { owner:'👑 Главный админ', admin:'⚙️ Админ', moderator:'🛡 Модератор', user:'👤 Пользователь' }[u.role] || u.role;
+  const text = 
+    `👤 <b>${tgEsc(u.display_name || u.username)}</b>\n` +
+    `🆔 @${tgEsc(u.username)}\n` +
+    `🎭 ${roleLabel}\n` +
+    `📅 С нами с ${new Date(u.created_at).toLocaleDateString('ru-RU')}\n\n` +
+    `📊 <b>Активность:</b>\n` +
+    `📋 Анкет: <b>${profilesCount}</b>\n` +
+    `👥 Друзей: <b>${friendsCount}</b>\n` +
+    (incoming > 0 ? `📩 Новых заявок: <b>${incoming}</b>\n` : '') +
+    (unread > 0 ? `💬 Непрочитанных сообщений: <b>${unread}</b>` : '');
+  return tgApi('sendMessage', {
+    chat_id: chatId, text, parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [[
+      { text: '🌐 Открыть профиль на сайте', url: SITE_URL },
+    ], [
+      { text: '◀️ Назад в меню', callback_data: 'menu' },
+    ]]}
+  });
+}
+
+async function sendStats(chatId) {
+  const totalUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
+  const profiles = db.prepare('SELECT COUNT(*) c FROM profiles').get().c;
+  const topics = db.prepare('SELECT COUNT(*) c FROM topics').get().c;
+  const onlineCount = db.prepare('SELECT COUNT(*) c FROM users WHERE last_seen > ?').get(Date.now() - 5*60*1000).c;
+  // Для не-модов показываем x13
+  const u = db.prepare('SELECT role FROM users WHERE tg_id=?').get(chatId);
+  const isMod = u && ['owner','admin','moderator'].includes(u.role);
+  const usersDisplay = isMod ? totalUsers : totalUsers * 13;
+  const text = 
+    `📊 <b>Статистика сайта</b>\n\n` +
+    `👥 Участников: <b>${usersDisplay}</b>\n` +
+    `🟢 Сейчас онлайн: <b>${onlineCount}</b>\n` +
+    `📋 Анкет: <b>${profiles}</b>\n` +
+    `💬 Тем форума: <b>${topics}</b>` +
+    (isMod ? `\n\n<i>👁 Реальное количество видно только админам</i>` : '');
+  return tgApi('sendMessage', {
+    chat_id: chatId, text, parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [[
+      { text: '◀️ Назад', callback_data: 'menu' },
+    ]]}
+  });
+}
+
+async function handleTgCallback(cb) {
+  const chatId = cb.message.chat.id;
+  const data = cb.data;
+  const messageId = cb.message.message_id;
+  // Подтверждаем callback (убираем "часики")
+  await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+  
+  const u = db.prepare('SELECT * FROM users WHERE tg_id=?').get(chatId);
+
+  if (data === 'menu') {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: u ? `📋 Главное меню\n\nС возвращением, <b>${tgEsc(u.display_name || u.username)}</b>!` : '📋 Меню:',
+      parse_mode: 'HTML',
+      reply_markup: u ? tgMainMenuKeyboard() : tgGuestMenuKeyboard(),
+    });
+  }
+
+  if (data === 'help') {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `❓ <b>Помощь</b>\n\n` +
+            `Я бот сайта <b>ANKETA.FORUM</b>.\n\n` +
+            `<b>Команды:</b>\n` +
+            `/start — главное меню\n` +
+            `/me — мой профиль\n` +
+            `/stats — статистика сайта\n` +
+            `/site — открыть сайт\n` +
+            `/menu — показать меню\n` +
+            `/unlink — отвязать аккаунт\n\n` +
+            `<b>Какие уведомления приходят?</b>\n` +
+            `🆕 Новые анкеты на сайте\n` +
+            `💬 Комментарии к твоей анкете\n` +
+            `📩 Заявки в друзья\n` +
+            `✅ Принятие твоих заявок\n` +
+            `💌 Личные сообщения\n` +
+            `🖼 Фото в комментариях к твоей анкете`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '◀️ Назад', callback_data: 'menu' }]] }
+    });
+  }
+
+  if (data === 'about') {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `ℹ️ <b>О боте</b>\n\n` +
+            `Я бот социального сайта <b>ANKETA.FORUM</b> — место где можно публиковать анкеты, общаться в форуме и заводить друзей.\n\n` +
+            `Особенности:\n` +
+            `🥷 Полная анонимность по желанию\n` +
+            `📋 Создание любых анкет\n` +
+            `💬 Форум и личные сообщения\n` +
+            `👥 Система друзей\n` +
+            `🔔 Уведомления через Telegram\n\n` +
+            `Привяжи аккаунт чтобы начать!`,
+      parse_mode: 'HTML',
+      reply_markup: tgGuestMenuKeyboard(),
+    });
+  }
+
+  if (data === 'how_to_link') {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `🔐 <b>Как привязать аккаунт</b>\n\n` +
+            `1️⃣ Зайди на сайт ${SITE_URL}\n` +
+            `2️⃣ Зарегистрируйся или войди\n` +
+            `3️⃣ Открой <b>Настройки → Telegram</b>\n` +
+            `4️⃣ Нажми <b>«Привязать Telegram»</b>\n` +
+            `5️⃣ Скопируй полученный 6-значный код\n` +
+            `6️⃣ Пришли его мне сюда\n\n` +
+            `Готово! Я буду присылать тебе уведомления 🎉`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [
+        [{ text: '🌐 Открыть сайт', url: SITE_URL }],
+        [{ text: '◀️ Назад', callback_data: 'menu' }],
+      ]}
+    });
+  }
+
+  if (!u) {
+    return tgApi('sendMessage', { chat_id: chatId, text: '🔒 Сначала привяжи аккаунт. Напиши /start' });
+  }
+
+  if (data === 'me') {
+    return sendUserProfile(chatId, u);
+  }
+
+  if (data === 'stats') {
+    return sendStats(chatId);
+  }
+
+  if (data === 'friends') {
+    const friendsCount = db.prepare("SELECT COUNT(*) c FROM friends WHERE (from_id=? OR to_id=?) AND status='accepted'").get(u.id, u.id).c;
+    const incoming = db.prepare("SELECT COUNT(*) c FROM friends WHERE to_id=? AND status='pending'").get(u.id).c;
+    const outgoing = db.prepare("SELECT COUNT(*) c FROM friends WHERE from_id=? AND status='pending'").get(u.id).c;
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `👥 <b>Друзья</b>\n\n` +
+            `✅ В друзьях: <b>${friendsCount}</b>\n` +
+            `📩 Входящих заявок: <b>${incoming}</b>\n` +
+            `📤 Исходящих: <b>${outgoing}</b>`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [
+        [{ text: '🌐 Управлять на сайте', url: SITE_URL }],
+        [{ text: '◀️ Назад', callback_data: 'menu' }],
+      ]}
+    });
+  }
+
+  if (data === 'chats') {
+    const unread = db.prepare('SELECT COUNT(*) c FROM dm_messages WHERE to_id=? AND read_at IS NULL').get(u.id).c;
+    const lastChats = db.prepare(`
+      SELECT DISTINCT u2.username, u2.display_name,
+        (SELECT created_at FROM dm_messages WHERE (from_id=u2.id AND to_id=?) OR (from_id=? AND to_id=u2.id) ORDER BY created_at DESC LIMIT 1) as last_at
+      FROM users u2 WHERE u2.id IN (
+        SELECT DISTINCT CASE WHEN from_id=? THEN to_id ELSE from_id END
+        FROM dm_messages WHERE from_id=? OR to_id=?
+      ) ORDER BY last_at DESC LIMIT 5
+    `).all(u.id, u.id, u.id, u.id, u.id);
+    let text = `💬 <b>Чаты</b>\n\n📩 Непрочитанных: <b>${unread}</b>\n`;
+    if (lastChats.length) {
+      text += '\n<b>Последние диалоги:</b>\n';
+      lastChats.forEach(c => {
+        text += `• ${tgEsc(c.display_name || c.username)}\n`;
+      });
+    }
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [
+        [{ text: '🌐 Открыть чаты', url: SITE_URL }],
+        [{ text: '◀️ Назад', callback_data: 'menu' }],
+      ]}
+    });
+  }
+
+  if (data === 'new_profiles') {
+    const last = db.prepare('SELECT name, age, bio, anon, created_at FROM profiles WHERE hidden=0 ORDER BY created_at DESC LIMIT 5').all();
+    let text = `🆕 <b>Последние анкеты</b>\n\n`;
+    if (!last.length) text += 'Пока нет анкет 🤷';
+    else last.forEach(p => {
+      const author = p.anon ? '🥷 Аноним' : '';
+      text += `• <b>${tgEsc(p.name)}</b>${p.age?`, ${p.age}`:''} ${author}\n`;
+      if (p.bio) text += `  <i>${tgEsc(p.bio.slice(0, 80))}${p.bio.length>80?'...':''}</i>\n`;
+      text += `\n`;
+    });
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [
+        [{ text: '🌐 Смотреть все', url: SITE_URL }],
+        [{ text: '◀️ Назад', callback_data: 'menu' }],
+      ]}
+    });
+  }
+
+  if (data === 'notif_settings') {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `🔔 <b>Настройки уведомлений</b>\n\n` +
+            `Сейчас тебе приходят все уведомления.\n\n` +
+            `Чтобы временно отключить — просто отключи бота в Telegram (нажми «Mute» вверху чата).\n\n` +
+            `Полностью отвязать аккаунт можно через /unlink`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [
+        [{ text: '🔌 Отвязать аккаунт', callback_data: 'unlink_confirm' }],
+        [{ text: '◀️ Назад', callback_data: 'menu' }],
+      ]}
+    });
+  }
+
+  if (data === 'unlink_confirm') {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `⚠️ <b>Отвязать Telegram?</b>\n\nАккаунт <b>${tgEsc(u.username)}</b> будет отвязан, уведомления перестанут приходить.`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[
+        { text: '✅ Да, отвязать', callback_data: 'unlink_yes' },
+        { text: '❌ Отмена', callback_data: 'menu' },
+      ]]}
+    });
+  }
+
+  if (data === 'unlink_yes') {
+    db.prepare('UPDATE users SET tg_id=NULL, tg_link_code=NULL WHERE id=?').run(u.id);
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `🔌 Готово, аккаунт <b>${tgEsc(u.username)}</b> отвязан.\n\nСпасибо что был с нами 👋\n\nЕсли передумаешь — напиши /start`,
+      parse_mode: 'HTML',
+    });
+  }
+
+  if (data === 'cancel') {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: 'Отменено ✓',
+    });
+  }
 }
 
 if (TG_BOT_TOKEN) {
