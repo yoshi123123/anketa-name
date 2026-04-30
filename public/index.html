@@ -490,7 +490,7 @@ input,textarea,select{font-family:var(--font);outline:none}
       <div class="sb-title">Меню</div>
       <button class="sb-nav-item" onclick="nav('home')"><span class="icon">🏠</span>Анкеты</button>
       <button class="sb-nav-item" onclick="nav('forum')"><span class="icon">💬</span>Форум</button>
-      <button class="sb-nav-item" onclick="requireAuth(()=>nav('create'))"><span class="icon">➕</span>Моя анкета</button>
+      <button class="sb-nav-item" onclick="nav('create')"><span class="icon">➕</span>Моя анкета</button>
       <button class="sb-nav-item" id="sbFriends" onclick="requireAuth(()=>{friendsTab='friends';openFriendsModal()})" style="position:relative"><span class="icon">👥</span>Друзья<span id="sbFriendsBadge" style="display:none;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:auto"></span></button>
       <button class="sb-nav-item" id="sbChats" onclick="requireAuth(()=>{friendsTab='chats';openFriendsModal()})" style="position:relative"><span class="icon">💌</span>Чаты<span id="sbChatsBadge" style="display:none;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:100px;margin-left:auto"></span></button>
     </div>
@@ -524,7 +524,7 @@ input,textarea,select{font-family:var(--font);outline:none}
     <button class="bnav-btn" id="bnavForum" onclick="nav('forum')">
       <span class="bico">💬</span>Форум
     </button>
-    <button class="bnav-btn" id="bnavCreate" onclick="requireAuth(()=>nav('create'))">
+    <button class="bnav-btn" id="bnavCreate" onclick="nav('create')">
       <span class="bico">➕</span>Создать
     </button>
     <button class="bnav-btn" id="bnavFriends" onclick="requireAuth(openFriendsModal)" style="position:relative">
@@ -566,6 +566,27 @@ input,textarea,select{font-family:var(--font);outline:none}
           <input class="finput" id="liPass" type="password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()">
         </div>
         <button class="btn btn-primary btn-block" onclick="doLogin()">Войти</button>
+
+        <div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">или</div>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+
+        <button class="btn btn-secondary btn-block" onclick="toggleTgLogin()" id="tgLoginToggleBtn" style="display:flex;align-items:center;justify-content:center;gap:8px">
+          <span style="font-size:18px">✈️</span> Войти через Telegram
+        </button>
+        <div id="tgLoginForm" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5">
+            1. Открой <a href="https://t.me/anketaforum_bot" target="_blank" style="color:var(--accent)">@anketaforum_bot</a> в Telegram<br>
+            2. Отправь команду <b style="color:var(--white)">/login</b><br>
+            3. Введи 6-значный код ниже
+          </div>
+          <div class="fgroup">
+            <input class="finput" id="tgLoginCode" placeholder="ABC123" maxlength="6" style="text-align:center;letter-spacing:6px;font-size:18px;font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')" onkeydown="if(event.key==='Enter')doTgLogin()">
+          </div>
+          <button class="btn btn-primary btn-block" onclick="doTgLogin()">Войти по коду</button>
+        </div>
       </div>
 
       <div class="auth-panel" id="apReg">
@@ -839,6 +860,30 @@ async function doLogin() {
   } catch (e) { errEl.textContent = e.message; }
 }
 
+function toggleTgLogin() {
+  const f = document.getElementById('tgLoginForm');
+  if (!f) return;
+  const visible = f.style.display !== 'none';
+  f.style.display = visible ? 'none' : 'block';
+  if (!visible) setTimeout(() => document.getElementById('tgLoginCode')?.focus(), 50);
+}
+
+async function doTgLogin() {
+  const code = (document.getElementById('tgLoginCode').value || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = '';
+  if (code.length !== 6) { errEl.textContent = 'Код должен быть из 6 символов'; return; }
+  try {
+    const { user } = await api('/auth/tg-login', { method:'POST', body:{ code } });
+    curUser = user;
+    closeAuth();
+    document.getElementById('tgLoginCode').value = '';
+    document.getElementById('tgLoginForm').style.display = 'none';
+    toast('Вход через Telegram выполнен', 'ok');
+    await loadAll();
+  } catch (e) { errEl.textContent = e.message; }
+}
+
 async function doRegister() {
   const username = document.getElementById('rUser').value.trim();
   const displayName = document.getElementById('rDisp').value.trim() || username;
@@ -996,7 +1041,7 @@ function renderHome() {
     </div>`;
   }).join('') : `<div class="empty-state">
       <div class="icon">📋</div><h3>Анкет пока нет</h3>
-      <div>${curUser?'Будь первым — нажми «Создать анкету»':'Войди, чтобы создать первую анкету'}</div>
+      <div>${curUser?'Будь первым — нажми «Создать анкету»':'Создай первую анкету (можно анонимно, без аккаунта)'}</div>
     </div>`;
 
   return `<h1 class="page-title">📋 Анкеты</h1>${adminBar}<div class="profiles-grid">${cards}</div>`;
@@ -1037,12 +1082,17 @@ function renderForum() {
 
 // ── CREATE PROFILE FORM ─────────────────────────────────────────
 function renderCreateProfile() {
-  if (!curUser) { setTimeout(openAuth, 0); return '<div class="empty-state"><h3>Войди, чтобы создать анкету</h3></div>'; }
-  return `<h1 class="page-title">➕ Новая анкета</h1>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;max-width:600px">
-      <div class="auth-err" id="cpErr"></div>
-
-      <!-- Статус анкеты — два переключателя вверху -->
+  const isGuest = !curUser;
+  const guestBanner = isGuest ? `
+    <div style="background:#5865f210;border:1px solid #5865f240;border-radius:var(--r2);padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-start">
+      <div style="font-size:22px">🥷</div>
+      <div style="font-size:12px;line-height:1.5;color:var(--white)">
+        <b>Анонимный пользователь.</b> Ты создаёшь анкету без аккаунта — она будет полностью анонимной и не привязана ни к какому профилю.
+        <a onclick="closeAll();openAuth();return false" href="#" style="color:var(--accent)">Войди или зарегистрируйся</a>, чтобы анкета осталась за тобой.
+      </div>
+    </div>` : '';
+  const optionsBlock = isGuest ? '' : `
+      <!-- Статус анкеты — два переключателя вверху (только для зареганых) -->
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
         <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div>
@@ -1065,7 +1115,12 @@ function renderCreateProfile() {
           </label>
         </div>
         <div id="cpStatusHint" style="display:none;font-size:12px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--border)"></div>
-      </div>
+      </div>`;
+  return `<h1 class="page-title">➕ Новая анкета</h1>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;max-width:600px">
+      <div class="auth-err" id="cpErr"></div>
+      ${guestBanner}
+      ${optionsBlock}
 
       <div class="form-row">
         <div class="fgroup"><label class="flabel">Имя</label><input class="finput" id="cpName" maxlength="50" placeholder="Имя"></div>
@@ -1076,6 +1131,7 @@ function renderCreateProfile() {
         <div class="fgroup" style="max-width:140px"><label class="flabel">Цвет</label><input class="finput" id="cpColor" type="color" value="#e8632a" style="height:36px;padding:2px"></div>
         <div class="fgroup"><label class="flabel">Теги (через запятую)</label><input class="finput" id="cpTags" placeholder="музыка, кино"></div>
       </div>
+      ${isGuest ? '' : `
       <div class="fgroup">
         <label class="flabel">Аватарка анкеты (необязательно)</label>
         <div style="display:flex;gap:10px;align-items:center">
@@ -1084,9 +1140,9 @@ function renderCreateProfile() {
           <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cpAvFile').click()">📷 Выбрать фото</button>
           <button type="button" id="cpAvClear" class="btn btn-ghost btn-sm" style="display:none" onclick="clearCpAvatar()">✕</button>
         </div>
-      </div>
+      </div>`}
       <div class="fgroup"><label class="flabel">О себе</label><textarea class="ftextarea" id="cpBio" maxlength="2000" placeholder="Опиши себя..."></textarea></div>
-      <button class="btn btn-primary btn-block" onclick="submitCreateProfile()">Опубликовать анкету</button>
+      <button class="btn btn-primary btn-block" onclick="submitCreateProfile()">${isGuest ? '🥷 Опубликовать анонимно' : 'Опубликовать анкету'}</button>
     </div>`;
 }
 
@@ -1148,15 +1204,23 @@ async function submitCreateProfile() {
   const color = document.getElementById('cpColor').value || '#e8632a';
   const bio   = document.getElementById('cpBio').value.trim();
   const tags  = document.getElementById('cpTags').value.split(',').map(s=>s.trim()).filter(Boolean);
-  const anon  = document.getElementById('cpAnon')?.checked || false;
-  const showInProfile = document.getElementById('cpShowInProfile')?.checked ?? true;
-  const avFile = document.getElementById('cpAvFile')?.files[0];
   const errEl = document.getElementById('cpErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Имя обязательно'; return; }
   try {
+    if (!curUser) {
+      // Гость — публикуем через анонимный endpoint, без аватарки/опций
+      const { profile } = await api('/profiles/anon', { method:'POST', body:{ name, age, emoji, color, bio, tags } });
+      toast('🥷 Анонимная анкета опубликована', 'ok');
+      await loadProfiles();
+      nav('home');
+      return;
+    }
+    // Зарегистрированный пользователь — обычный поток с опциями
+    const anon  = document.getElementById('cpAnon')?.checked || false;
+    const showInProfile = document.getElementById('cpShowInProfile')?.checked ?? true;
+    const avFile = document.getElementById('cpAvFile')?.files[0];
     const { profile } = await api('/profiles', { method:'POST', body:{ name, age, emoji, color, bio, tags, anon, showInProfile } });
-    // Если выбрана аватарка — загружаем
     if (avFile && profile?.id) {
       try {
         const fd = new FormData();

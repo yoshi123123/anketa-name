@@ -26,7 +26,8 @@ if (JWT_SECRET === 'dev_only_change_me')
   console.warn('⚠  JWT_SECRET не задан — небезопасный дефолт');
 
 // ── TELEGRAM BOT ────────────────────────────────────────────────────
-const tgEsc = s => String(s||'').replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+// HTML-эскейп (используется во всех parse_mode: 'HTML' сообщениях)
+const tgEsc = s => String(s||'').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c]);
 
 // HTTPS request helper (без зависимости от глобального fetch)
 function httpsJson(urlStr, options = {}) {
@@ -86,10 +87,41 @@ function tgNotifyOwner(text) {
   } catch {}
 }
 
-// Генерация кода привязки
-function generateLinkCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
+// Скачать файл из Telegram → сохранить в указанную папку, вернуть имя
+async function tgDownloadPhoto(fileId, destDir) {
+  if (!TG_BOT_TOKEN) return null;
+  try {
+    const info = await tgApi('getFile', { file_id: fileId });
+    if (!info?.ok || !info.result?.file_path) return null;
+    const url = `https://api.telegram.org/file/bot${TG_BOT_TOKEN}/${info.result.file_path}`;
+    const ext = (path.extname(info.result.file_path).toLowerCase() || '.jpg');
+    const filename = Date.now() + '_' + Math.random().toString(36).slice(2) + ext;
+    const destPath = path.join(destDir, filename);
+    fs.mkdirSync(destDir, { recursive: true });
+    await new Promise((resolve, reject) => {
+      const req2 = https.get(url, r => {
+        if (r.statusCode !== 200) { reject(new Error('HTTP ' + r.statusCode)); return; }
+        const ws = fs.createWriteStream(destPath);
+        r.pipe(ws);
+        ws.on('finish', () => ws.close(() => resolve()));
+        ws.on('error', reject);
+      });
+      req2.on('error', reject);
+      req2.setTimeout(30000, () => { req2.destroy(); reject(new Error('timeout')); });
+    });
+    return filename;
+  } catch(e) {
+    console.warn('TG download error:', e.message);
+    return null;
+  }
 }
+
+// Генерация 6-значного кода (привязка/вход)
+function generateLinkCode() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
+
+// State-machine для создания анкеты через бота
+// chatId -> { step, isLinked, userId, data: { name, tag, bio, photos[], anon, show_in_profile } }
+const botStates = new Map();
 
 // Long polling
 let tgOffset = 0;
@@ -120,11 +152,10 @@ async function tgPoll() {
 function tgMainMenuKeyboard() {
   return {
     inline_keyboard: [
-      [{ text: '🌐 Открыть сайт', url: SITE_URL }],
-      [{ text: '👤 Мой профиль', callback_data: 'me' }, { text: '📊 Статистика', callback_data: 'stats' }],
-      [{ text: '👥 Мои друзья', callback_data: 'friends' }, { text: '💬 Чаты', callback_data: 'chats' }],
-      [{ text: '🆕 Новые анкеты', callback_data: 'new_profiles' }],
-      [{ text: '🔔 Настройки уведомлений', callback_data: 'notif_settings' }],
+      [{ text: '🌐 Открыть сайт', url: SITE_URL }, { text: '🔑 Войти на сайте', callback_data: 'site_login' }],
+      [{ text: '📝 Создать анкету', callback_data: 'create_profile' }, { text: '📋 Смотреть анкеты', callback_data: 'view_profiles:0' }],
+      [{ text: '👤 Мой профиль', callback_data: 'me' }, { text: '👥 Друзья', callback_data: 'friends' }],
+      [{ text: '💬 Чаты', callback_data: 'chats' }, { text: '🔔 Уведомления', callback_data: 'notif_settings' }],
       [{ text: '❓ Помощь', callback_data: 'help' }, { text: '🔌 Отвязать', callback_data: 'unlink_confirm' }],
     ]
   };
@@ -135,47 +166,80 @@ function tgGuestMenuKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '🌐 Открыть сайт', url: SITE_URL }],
+      [{ text: '📝 Создать анкету (анонимно)', callback_data: 'create_profile' }],
+      [{ text: '📋 Смотреть анкеты', callback_data: 'view_profiles:0' }],
       [{ text: '🔐 Как привязать аккаунт?', callback_data: 'how_to_link' }],
       [{ text: '❓ О боте', callback_data: 'about' }],
     ]
   };
 }
 
+function tgCpPhotosKeyboard() {
+  return { inline_keyboard: [
+    [{ text: '✅ Готово, дальше', callback_data: 'cp_photos_done' }],
+    [{ text: '🚫 Без фото', callback_data: 'cp_photos_skip' }],
+    [{ text: '❌ Отмена', callback_data: 'cp_cancel' }],
+  ]};
+}
+
+function tgCpOptionsKeyboard(state, isLinked) {
+  if (!isLinked) {
+    return { inline_keyboard: [
+      [{ text: '🚀 Опубликовать анонимно', callback_data: 'cp_publish' }],
+      [{ text: '❌ Отмена', callback_data: 'cp_cancel' }],
+    ]};
+  }
+  const a = state.data.anon ? '✅' : '⬜️';
+  const s = state.data.show_in_profile ? '✅' : '⬜️';
+  return { inline_keyboard: [
+    [{ text: `${a} 🥷 Анонимно`, callback_data: 'cp_toggle_anon' }],
+    [{ text: `${s} 👤 Показать в моём профиле`, callback_data: 'cp_toggle_show' }],
+    [{ text: '🚀 Опубликовать', callback_data: 'cp_publish' }],
+    [{ text: '❌ Отмена', callback_data: 'cp_cancel' }],
+  ]};
+}
+
 async function handleTgMessage(msg) {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
-  const firstName = msg.from.first_name || 'друг';
+  const firstName = msg.from?.first_name || 'друг';
 
-  if (text === '/start') {
-    const linked = db.prepare('SELECT id, username, display_name, role FROM users WHERE tg_id=?').get(chatId);
-    if (linked) {
-      const roleEmoji = linked.role === 'owner' ? '👑' : linked.role === 'admin' ? '⚙️' : linked.role === 'moderator' ? '🛡' : '';
-      return tgApi('sendMessage', {
-        chat_id: chatId,
-        text: `🎉 С возвращением, <b>${tgEsc(linked.display_name || linked.username)}</b>! ${roleEmoji}\n\n` +
-              `Я — твой персональный помощник в мире <b>ANKETA.FORUM</b>. Через меня ты узнаёшь обо всём, что происходит на сайте, не открывая его.\n\n` +
-              `Выбери что-нибудь из меню ниже 👇`,
-        parse_mode: 'HTML',
-        reply_markup: tgMainMenuKeyboard(),
-      });
+  // /cancel сбрасывает state
+  if (text === '/cancel') {
+    if (botStates.has(chatId)) {
+      botStates.delete(chatId);
+      return tgApi('sendMessage', { chat_id: chatId, text: '❌ Создание анкеты отменено.' });
     }
-    return tgApi('sendMessage', {
-      chat_id: chatId,
-      text: `👋 Привет, <b>${tgEsc(firstName)}</b>!\n\n` +
-            `Я — бот социалки <b>ANKETA.FORUM</b> 🎭\n\n` +
-            `На сайте ты можешь:\n` +
-            `📋 создавать анкеты — обычные или анонимные\n` +
-            `💬 общаться в форуме и личке\n` +
-            `👥 заводить друзей\n` +
-            `🥷 быть полностью анонимным\n\n` +
-            `А я буду присылать тебе уведомления, чтобы ты ничего не пропустил.\n\n` +
-            `<b>Чтобы начать — привяжи аккаунт</b> 👇`,
-      parse_mode: 'HTML',
-      reply_markup: tgGuestMenuKeyboard(),
-    });
   }
 
-  if (text === '/menu' || text === '/help') {
+  // /start, /menu, /help — всегда сбрасывают state и показывают меню
+  if (text === '/start' || text === '/menu' || text === '/help') {
+    botStates.delete(chatId);
+    if (text === '/start') {
+      const linked = db.prepare('SELECT id, username, display_name, role FROM users WHERE tg_id=?').get(chatId);
+      if (linked) {
+        const roleEmoji = linked.role === 'owner' ? '👑' : linked.role === 'admin' ? '⚙️' : linked.role === 'moderator' ? '🛡' : '';
+        return tgApi('sendMessage', {
+          chat_id: chatId,
+          text: `🎉 С возвращением, <b>${tgEsc(linked.display_name || linked.username)}</b>! ${roleEmoji}\n\n` +
+                `Я — твой помощник в мире <b>ANKETA.FORUM</b>. Прямо здесь ты можешь создавать анкеты, смотреть свежие, входить на сайт по коду и получать уведомления.\n\n` +
+                `Выбирай 👇`,
+          parse_mode: 'HTML',
+          reply_markup: tgMainMenuKeyboard(),
+        });
+      }
+      return tgApi('sendMessage', {
+        chat_id: chatId,
+        text: `👋 Привет, <b>${tgEsc(firstName)}</b>!\n\n` +
+              `Я — бот социалки <b>ANKETA.FORUM</b> 🎭\n\n` +
+              `Прямо в чате ты можешь:\n` +
+              `📝 создавать анкеты — без аккаунта тоже можно (анонимно)\n` +
+              `📋 листать свежие анкеты\n\n` +
+              `А если зарегистрируешься на сайте — получишь форум, друзей, личку и быстрый вход через Telegram по одноразовому коду.`,
+        parse_mode: 'HTML',
+        reply_markup: tgGuestMenuKeyboard(),
+      });
+    }
     const linked = db.prepare('SELECT id FROM users WHERE tg_id=?').get(chatId);
     return tgApi('sendMessage', {
       chat_id: chatId,
@@ -185,16 +249,19 @@ async function handleTgMessage(msg) {
   }
 
   if (text === '/me') {
+    botStates.delete(chatId);
     const u = db.prepare('SELECT * FROM users WHERE tg_id=?').get(chatId);
     if (!u) return tgApi('sendMessage', { chat_id: chatId, text: 'Сначала привяжи аккаунт через /start' });
     return sendUserProfile(chatId, u);
   }
 
-  if (text === '/stats') {
-    return sendStats(chatId);
+  if (text === '/login') {
+    botStates.delete(chatId);
+    return doSiteLogin(chatId);
   }
 
   if (text === '/unlink') {
+    botStates.delete(chatId);
     const u = db.prepare('SELECT id, username FROM users WHERE tg_id=?').get(chatId);
     if (!u) return tgApi('sendMessage', { chat_id: chatId, text: '🤷 Аккаунт не привязан.\n\nНапиши /start' });
     return tgApi('sendMessage', {
@@ -202,7 +269,7 @@ async function handleTgMessage(msg) {
       text: `Точно отвязать аккаунт <b>${tgEsc(u.username)}</b>?\n\nУведомления перестанут приходить.`,
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [[
-        { text: '✅ Да, отвязать', callback_data: 'unlink_confirm' },
+        { text: '✅ Да, отвязать', callback_data: 'unlink_yes' },
         { text: '❌ Отмена', callback_data: 'cancel' },
       ]]}
     });
@@ -216,7 +283,13 @@ async function handleTgMessage(msg) {
     });
   }
 
-  // Проверка кода привязки
+  // ── Если идёт создание анкеты — обрабатываем как часть flow ──
+  const state = botStates.get(chatId);
+  if (state) {
+    return handleCpStep(chatId, msg, state);
+  }
+
+  // Проверка кода привязки (6 символов A-Z 0-9)
   const code = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length === 6) {
     const u = db.prepare('SELECT id, username, display_name FROM users WHERE tg_link_code=?').get(code);
@@ -232,9 +305,7 @@ async function handleTgMessage(msg) {
       db.prepare('UPDATE users SET tg_id=?, tg_link_code=NULL WHERE id=?').run(chatId, u.id);
       return tgApi('sendMessage', {
         chat_id: chatId,
-        text: `🎉 <b>Готово!</b>\n\nАккаунт <b>${tgEsc(u.display_name || u.username)}</b> успешно привязан ✅\n\nТеперь ты будешь получать все уведомления:\n` +
-              `🆕 о новых анкетах\n💬 о комментариях к твоим анкетам\n📩 о заявках в друзья\n💌 о новых сообщениях\n\n` +
-              `Можешь смело сворачивать чат — я не пропаду 😉`,
+        text: `🎉 <b>Готово!</b>\n\nАккаунт <b>${tgEsc(u.display_name || u.username)}</b> успешно привязан ✅\n\nТеперь ты можешь:\n📝 создавать анкеты в боте\n🔑 быстро входить на сайт по одноразовому коду (/login)\n💬 получать уведомления`,
         parse_mode: 'HTML',
         reply_markup: tgMainMenuKeyboard(),
       });
@@ -243,14 +314,259 @@ async function handleTgMessage(msg) {
       chat_id: chatId,
       text: '❌ <b>Неверный код</b>\n\nВозможно, он истёк или уже использован.\n\nПолучи новый код на сайте → Настройки → Telegram',
       parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: '🌐 Получить новый код', url: SITE_URL }]] }
+      reply_markup: { inline_keyboard: [[{ text: '🌐 Открыть сайт', url: SITE_URL }]] }
     });
   }
 
-  // Случайный текст
   return tgApi('sendMessage', {
     chat_id: chatId,
-    text: '🤔 Не понял. Вот команды которые я знаю:\n\n/start — главное меню\n/menu — открыть меню\n/me — мой профиль\n/stats — статистика сайта\n/site — открыть сайт\n/unlink — отвязать аккаунт',
+    text: '🤔 Не понял. Команды:\n\n/start — главное меню\n/menu — меню\n/me — мой профиль\n/login — код для входа на сайте\n/site — открыть сайт\n/cancel — отмена создания анкеты\n/unlink — отвязать аккаунт',
+  });
+}
+
+// ──── ВХОД НА САЙТ ПО КОДУ ────────────────────────────────────────────
+async function doSiteLogin(chatId) {
+  const u = db.prepare('SELECT id, username FROM users WHERE tg_id=?').get(chatId);
+  if (!u) {
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: '🔒 Сначала привяжи аккаунт.\n\nНапиши /start, зарегистрируйся на сайте и привяжи Telegram.',
+    });
+  }
+  const code = generateLinkCode();
+  const expires = Date.now() + 5 * 60 * 1000; // 5 минут
+  db.prepare('UPDATE users SET tg_login_code=?, tg_login_code_expires=? WHERE id=?').run(code, expires, u.id);
+  return tgApi('sendMessage', {
+    chat_id: chatId,
+    text: `🔑 <b>Код для входа на сайте</b>\n\n<code>${code}</code>\n\n` +
+          `Введи его на сайте: кнопка <b>«Войти через Telegram»</b> в форме входа.\n\n` +
+          `⏱ Действует 5 минут\n` +
+          `🔒 Одноразовый — после использования сгорит`,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      [{ text: '🌐 Перейти на сайт', url: SITE_URL }],
+      [{ text: '◀️ В меню', callback_data: 'menu' }],
+    ]}
+  });
+}
+
+// ──── СОЗДАНИЕ АНКЕТЫ ─────────────────────────────────────────────────
+async function startCpFlow(chatId) {
+  const u = db.prepare('SELECT id, username, display_name FROM users WHERE tg_id=?').get(chatId);
+  const isLinked = !!u;
+  botStates.set(chatId, {
+    step: 'cp_name',
+    isLinked,
+    userId: u?.id || null,
+    data: {
+      name: '',
+      tag: '',
+      bio: '',
+      photos: [],
+      anon: !isLinked,         // гость = всегда анон
+      show_in_profile: isLinked, // зареганный = по умолчанию в профиле
+    },
+  });
+  const greet = isLinked
+    ? `📝 <b>Создание анкеты</b>\n\nЗдорово, <b>${tgEsc(u.display_name || u.username)}</b>! Создадим анкету.\n\n`
+    : `📝 <b>Создание анкеты</b>\n\nТы без аккаунта, поэтому анкета будет <b>анонимной</b> (без привязки к профилю). Это ок 🥷\n\n`;
+  return tgApi('sendMessage', {
+    chat_id: chatId,
+    text: greet + `<b>Шаг 1/4:</b> как называется анкета? Пришли имя (до 50 символов).\n\n<i>Отменить можно в любой момент: /cancel</i>`,
+    parse_mode: 'HTML',
+  });
+}
+
+async function handleCpStep(chatId, msg, state) {
+  const text = (msg.text || '').trim();
+
+  if (state.step === 'cp_name') {
+    if (!text) return tgApi('sendMessage', { chat_id: chatId, text: 'Пришли имя текстом.' });
+    state.data.name = text.slice(0, 50);
+    state.step = 'cp_tag';
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: `<b>Шаг 2/4:</b> теги через запятую (например: <i>музыка, кино</i>). Или пришли «-» чтобы пропустить.`,
+      parse_mode: 'HTML',
+    });
+  }
+
+  if (state.step === 'cp_tag') {
+    if (!text) return tgApi('sendMessage', { chat_id: chatId, text: 'Пришли теги текстом или «-» чтобы пропустить.' });
+    state.data.tag = (text === '-' || text.toLowerCase() === 'пропустить') ? '' : text;
+    state.step = 'cp_bio';
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: `<b>Шаг 3/4:</b> содержание анкеты (до 2000 символов). Расскажи о себе/анкете.\n\nИли пришли «-» чтобы пропустить.`,
+      parse_mode: 'HTML',
+    });
+  }
+
+  if (state.step === 'cp_bio') {
+    if (!text) return tgApi('sendMessage', { chat_id: chatId, text: 'Пришли текст или «-» чтобы пропустить.' });
+    state.data.bio = (text === '-') ? '' : text.slice(0, 2000);
+    state.step = 'cp_photos';
+    return tgApi('sendMessage', {
+      chat_id: chatId,
+      text: `<b>Шаг 4/4:</b> пришли фото (можно несколько по очереди). Когда закончишь — нажми «Готово». Или «Без фото».`,
+      parse_mode: 'HTML',
+      reply_markup: tgCpPhotosKeyboard(),
+    });
+  }
+
+  if (state.step === 'cp_photos') {
+    // photo array: берём самую большую (последний элемент)
+    if (msg.photo && Array.isArray(msg.photo) && msg.photo.length) {
+      const best = msg.photo[msg.photo.length - 1];
+      if (state.data.photos.length >= 8) {
+        return tgApi('sendMessage', { chat_id: chatId, text: 'Лимит 8 фото. Жми «Готово».', reply_markup: tgCpPhotosKeyboard() });
+      }
+      const filename = await tgDownloadPhoto(best.file_id, DIRS.profiles);
+      if (!filename) {
+        return tgApi('sendMessage', { chat_id: chatId, text: '⚠️ Не удалось скачать фото, попробуй ещё.', reply_markup: tgCpPhotosKeyboard() });
+      }
+      state.data.photos.push('/uploads/profiles/' + filename);
+      return tgApi('sendMessage', {
+        chat_id: chatId,
+        text: `✓ Фото ${state.data.photos.length} добавлено. Можно ещё или жми «Готово».`,
+        reply_markup: tgCpPhotosKeyboard(),
+      });
+    }
+    if (msg.document && /^image\//.test(msg.document.mime_type || '')) {
+      if (state.data.photos.length >= 8) {
+        return tgApi('sendMessage', { chat_id: chatId, text: 'Лимит 8 фото.', reply_markup: tgCpPhotosKeyboard() });
+      }
+      const filename = await tgDownloadPhoto(msg.document.file_id, DIRS.profiles);
+      if (!filename) return tgApi('sendMessage', { chat_id: chatId, text: '⚠️ Не удалось скачать.', reply_markup: tgCpPhotosKeyboard() });
+      state.data.photos.push('/uploads/profiles/' + filename);
+      return tgApi('sendMessage', { chat_id: chatId, text: `✓ Фото ${state.data.photos.length} добавлено.`, reply_markup: tgCpPhotosKeyboard() });
+    }
+    return tgApi('sendMessage', { chat_id: chatId, text: 'Пришли фото или нажми кнопку.', reply_markup: tgCpPhotosKeyboard() });
+  }
+
+  // cp_options обрабатывается через callback'и
+  return tgApi('sendMessage', { chat_id: chatId, text: 'Пользуйся кнопками 👇' });
+}
+
+async function showCpOptions(chatId, state) {
+  state.step = 'cp_options';
+  const photoStr = state.data.photos.length ? `\n📷 Фото: ${state.data.photos.length}` : '\n📷 Без фото';
+  const text =
+    `<b>📋 Превью анкеты:</b>\n\n` +
+    `<b>Имя:</b> ${tgEsc(state.data.name)}\n` +
+    (state.data.tag ? `<b>Теги:</b> ${tgEsc(state.data.tag)}\n` : '') +
+    (state.data.bio ? `<b>О себе:</b> ${tgEsc(state.data.bio.slice(0,300))}${state.data.bio.length>300?'...':''}\n` : '') +
+    photoStr + `\n\n` +
+    (state.isLinked ? `Настрой опции и публикуй:` : `Анкета будет анонимной (ты без аккаунта).`);
+  return tgApi('sendMessage', {
+    chat_id: chatId, text, parse_mode: 'HTML',
+    reply_markup: tgCpOptionsKeyboard(state, state.isLinked),
+  });
+}
+
+async function publishCpProfile(chatId, state) {
+  const tags = state.data.tag
+    ? state.data.tag.split(/[,;]/).map(s => s.trim()).filter(Boolean).slice(0, 10)
+    : [];
+  const photos = state.data.photos.slice();
+  const avatar = photos.length ? photos[0] : null;
+  // owner_id: если залогинен — всегда его id (для редактирования);
+  // anon-флаг определяет видимость имени; show_in_profile — отображать ли в его профиле.
+  const realOwner = state.isLinked ? state.userId : null;
+
+  const info = db.prepare(`INSERT INTO profiles(owner_id,name,age,emoji,color,bio,tags,avatar,photos,anon,show_in_profile,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(
+      realOwner,
+      state.data.name.slice(0, 50),
+      null,
+      '👤',
+      '#e8632a',
+      state.data.bio.slice(0, 2000),
+      JSON.stringify(tags),
+      avatar,
+      JSON.stringify(photos),
+      state.data.anon ? 1 : 0,
+      state.data.show_in_profile ? 1 : 0,
+      Date.now(),
+    );
+  const p = db.prepare('SELECT * FROM profiles WHERE id=?').get(info.lastInsertRowid);
+  io.emit('profile:created', publicProfile(p));
+  io.emit('stats:update');
+  const actor = state.isLinked ? db.prepare('SELECT * FROM users WHERE id=?').get(state.userId) : null;
+  audit(actor, 'create_profile_via_bot', `#${p.id} anon=${p.anon} show=${p.show_in_profile}`);
+
+  // Уведомляем подписчиков (кроме автора)
+  if (TG_BOT_TOKEN && !p.hidden) {
+    try {
+      const subs = db.prepare('SELECT tg_id FROM users WHERE tg_id IS NOT NULL AND banned=0 AND tg_id!=?').all(chatId);
+      const authorName = p.anon
+        ? '🥷 Аноним'
+        : (db.prepare('SELECT display_name, username FROM users WHERE id=?').get(p.owner_id)?.display_name || 'Кто-то');
+      const text = `🆕 Новая анкета: <b>${tgEsc(p.name)}</b>\nОт: <b>${tgEsc(authorName)}</b>${p.bio?`\n\n${tgEsc(p.bio.slice(0,200))}`:''}\n\n${SITE_URL}`;
+      for (const s of subs) tgApi('sendMessage', { chat_id: s.tg_id, text, parse_mode: 'HTML', disable_web_page_preview: true });
+    } catch(e) { console.warn('TG notify new profile via bot:', e.message); }
+  }
+
+  botStates.delete(chatId);
+  return tgApi('sendMessage', {
+    chat_id: chatId,
+    text: `🎉 <b>Анкета опубликована!</b>\n\n` +
+          `<b>${tgEsc(p.name)}</b>${p.anon?' 🥷 (анонимно)':''}\n\n` +
+          `Открой её на сайте 👇`,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      [{ text: '🌐 Открыть на сайте', url: SITE_URL }],
+      [{ text: '📝 Создать ещё', callback_data: 'create_profile' }],
+      [{ text: '◀️ В меню', callback_data: 'menu' }],
+    ]}
+  });
+}
+
+// ──── ПРОСМОТР АНКЕТ ──────────────────────────────────────────────────
+async function viewProfilesAt(chatId, messageId, offset) {
+  const total = db.prepare('SELECT COUNT(*) c FROM profiles WHERE hidden=0').get().c;
+  if (total === 0) {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: '📋 <b>Анкеты</b>\n\nПока нет анкет 🤷\n\nХочешь создать первую?',
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [
+        [{ text: '📝 Создать анкету', callback_data: 'create_profile' }],
+        [{ text: '◀️ В меню', callback_data: 'menu' }],
+      ]},
+    });
+  }
+  offset = Math.max(0, Math.min(offset, total - 1));
+  const p = db.prepare(`
+    SELECT p.*, u.display_name as a_name, u.username as a_username
+    FROM profiles p LEFT JOIN users u ON u.id = p.owner_id
+    WHERE p.hidden=0
+    ORDER BY p.pinned DESC, p.created_at DESC LIMIT 1 OFFSET ?
+  `).get(offset);
+  if (!p) return;
+  const author = p.anon ? '🥷 Аноним' : (p.a_name || p.a_username || 'Кто-то');
+  let tags = [];
+  try { tags = JSON.parse(p.tags || '[]'); } catch {}
+  let photos = [];
+  try { photos = JSON.parse(p.photos || '[]'); } catch {}
+  const date = new Date(p.created_at).toLocaleDateString('ru-RU');
+  const text =
+    `📋 <b>${tgEsc(p.name)}</b>${p.age?`, ${p.age}`:''}\n` +
+    `👤 ${tgEsc(author)} · 📅 ${date}\n` +
+    (tags.length ? `🏷 ${tags.map(t=>tgEsc(t)).join(', ')}\n` : '') +
+    (photos.length ? `📷 Фото: ${photos.length}\n` : '') +
+    (p.bio ? `\n${tgEsc(p.bio.slice(0, 600))}${p.bio.length>600?'...':''}` : '') +
+    `\n\n<i>Анкета ${offset + 1} из ${total}</i>`;
+  const navRow = [];
+  if (offset > 0) navRow.push({ text: '⬅️', callback_data: `view_profiles:${offset-1}` });
+  navRow.push({ text: '🌐 На сайте', url: SITE_URL });
+  if (offset < total - 1) navRow.push({ text: '➡️', callback_data: `view_profiles:${offset+1}` });
+  return tgApi('editMessageText', {
+    chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      navRow,
+      [{ text: '📝 Создать свою', callback_data: 'create_profile' }, { text: '◀️ В меню', callback_data: 'menu' }],
+    ]},
   });
 }
 
@@ -260,47 +576,21 @@ async function sendUserProfile(chatId, u) {
   const unread = db.prepare('SELECT COUNT(*) c FROM dm_messages WHERE to_id=? AND read_at IS NULL').get(u.id).c;
   const incoming = db.prepare("SELECT COUNT(*) c FROM friends WHERE to_id=? AND status='pending'").get(u.id).c;
   const roleLabel = { owner:'👑 Главный админ', admin:'⚙️ Админ', moderator:'🛡 Модератор', user:'👤 Пользователь' }[u.role] || u.role;
-  const text = 
+  const text =
     `👤 <b>${tgEsc(u.display_name || u.username)}</b>\n` +
     `🆔 @${tgEsc(u.username)}\n` +
     `🎭 ${roleLabel}\n` +
     `📅 С нами с ${new Date(u.created_at).toLocaleDateString('ru-RU')}\n\n` +
-    `📊 <b>Активность:</b>\n` +
-    `📋 Анкет: <b>${profilesCount}</b>\n` +
+    `📋 Моих анкет: <b>${profilesCount}</b>\n` +
     `👥 Друзей: <b>${friendsCount}</b>\n` +
     (incoming > 0 ? `📩 Новых заявок: <b>${incoming}</b>\n` : '') +
     (unread > 0 ? `💬 Непрочитанных сообщений: <b>${unread}</b>` : '');
   return tgApi('sendMessage', {
     chat_id: chatId, text, parse_mode: 'HTML',
-    reply_markup: { inline_keyboard: [[
-      { text: '🌐 Открыть профиль на сайте', url: SITE_URL },
-    ], [
-      { text: '◀️ Назад в меню', callback_data: 'menu' },
-    ]]}
-  });
-}
-
-async function sendStats(chatId) {
-  const totalUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
-  const profiles = db.prepare('SELECT COUNT(*) c FROM profiles').get().c;
-  const topics = db.prepare('SELECT COUNT(*) c FROM topics').get().c;
-  const onlineCount = db.prepare('SELECT COUNT(*) c FROM users WHERE last_seen > ?').get(Date.now() - 5*60*1000).c;
-  // Для не-модов показываем x13
-  const u = db.prepare('SELECT role FROM users WHERE tg_id=?').get(chatId);
-  const isMod = u && ['owner','admin','moderator'].includes(u.role);
-  const usersDisplay = isMod ? totalUsers : totalUsers * 13;
-  const text = 
-    `📊 <b>Статистика сайта</b>\n\n` +
-    `👥 Участников: <b>${usersDisplay}</b>\n` +
-    `🟢 Сейчас онлайн: <b>${onlineCount}</b>\n` +
-    `📋 Анкет: <b>${profiles}</b>\n` +
-    `💬 Тем форума: <b>${topics}</b>` +
-    (isMod ? `\n\n<i>👁 Реальное количество видно только админам</i>` : '');
-  return tgApi('sendMessage', {
-    chat_id: chatId, text, parse_mode: 'HTML',
-    reply_markup: { inline_keyboard: [[
-      { text: '◀️ Назад', callback_data: 'menu' },
-    ]]}
+    reply_markup: { inline_keyboard: [
+      [{ text: '🌐 Открыть профиль', url: SITE_URL }],
+      [{ text: '◀️ В меню', callback_data: 'menu' }],
+    ]},
   });
 }
 
@@ -308,12 +598,13 @@ async function handleTgCallback(cb) {
   const chatId = cb.message.chat.id;
   const data = cb.data;
   const messageId = cb.message.message_id;
-  // Подтверждаем callback (убираем "часики")
   await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
-  
+
   const u = db.prepare('SELECT * FROM users WHERE tg_id=?').get(chatId);
 
+  // Универсальные (доступны всем)
   if (data === 'menu') {
+    botStates.delete(chatId);
     return tgApi('editMessageText', {
       chat_id: chatId, message_id: messageId,
       text: u ? `📋 Главное меню\n\nС возвращением, <b>${tgEsc(u.display_name || u.username)}</b>!` : '📋 Меню:',
@@ -330,19 +621,18 @@ async function handleTgCallback(cb) {
             `<b>Команды:</b>\n` +
             `/start — главное меню\n` +
             `/me — мой профиль\n` +
-            `/stats — статистика сайта\n` +
+            `/login — код для входа на сайте\n` +
             `/site — открыть сайт\n` +
-            `/menu — показать меню\n` +
+            `/menu — меню\n` +
+            `/cancel — отменить создание анкеты\n` +
             `/unlink — отвязать аккаунт\n\n` +
-            `<b>Какие уведомления приходят?</b>\n` +
-            `🆕 Новые анкеты на сайте\n` +
-            `💬 Комментарии к твоей анкете\n` +
-            `📩 Заявки в друзья\n` +
-            `✅ Принятие твоих заявок\n` +
-            `💌 Личные сообщения\n` +
-            `🖼 Фото в комментариях к твоей анкете`,
+            `<b>Что я умею:</b>\n` +
+            `📝 Создавать анкеты прямо в чате (даже без аккаунта)\n` +
+            `📋 Показывать свежие анкеты\n` +
+            `🔑 Выдавать одноразовый код для входа на сайт\n` +
+            `🔔 Уведомления: новые анкеты, комментарии, заявки в друзья, личка`,
       parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: '◀️ Назад', callback_data: 'menu' }]] }
+      reply_markup: { inline_keyboard: [[{ text: '◀️ В меню', callback_data: 'menu' }]] }
     });
   }
 
@@ -353,11 +643,9 @@ async function handleTgCallback(cb) {
             `Я бот социального сайта <b>ANKETA.FORUM</b> — место где можно публиковать анкеты, общаться в форуме и заводить друзей.\n\n` +
             `Особенности:\n` +
             `🥷 Полная анонимность по желанию\n` +
-            `📋 Создание любых анкет\n` +
-            `💬 Форум и личные сообщения\n` +
-            `👥 Система друзей\n` +
-            `🔔 Уведомления через Telegram\n\n` +
-            `Привяжи аккаунт чтобы начать!`,
+            `📝 Создание анкет в боте или на сайте\n` +
+            `🔑 Быстрый вход через Telegram\n` +
+            `💬 Форум, личка, друзья`,
       parse_mode: 'HTML',
       reply_markup: tgGuestMenuKeyboard(),
     });
@@ -373,26 +661,66 @@ async function handleTgCallback(cb) {
             `4️⃣ Нажми <b>«Привязать Telegram»</b>\n` +
             `5️⃣ Скопируй полученный 6-значный код\n` +
             `6️⃣ Пришли его мне сюда\n\n` +
-            `Готово! Я буду присылать тебе уведомления 🎉`,
+            `Готово! 🎉`,
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [
         [{ text: '🌐 Открыть сайт', url: SITE_URL }],
-        [{ text: '◀️ Назад', callback_data: 'menu' }],
+        [{ text: '◀️ В меню', callback_data: 'menu' }],
       ]}
     });
   }
 
+  // Создание анкеты доступно всем
+  if (data === 'create_profile') {
+    return startCpFlow(chatId);
+  }
+
+  // Просмотр анкет доступен всем
+  if (data.startsWith('view_profiles:')) {
+    const offset = parseInt(data.split(':')[1], 10) || 0;
+    return viewProfilesAt(chatId, messageId, offset);
+  }
+
+  // ──── Шаги создания анкеты ────
+  const state = botStates.get(chatId);
+  if (data === 'cp_cancel') {
+    botStates.delete(chatId);
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: '❌ Создание анкеты отменено.',
+      reply_markup: { inline_keyboard: [[{ text: '◀️ В меню', callback_data: 'menu' }]] },
+    });
+  }
+  if (state) {
+    if (data === 'cp_photos_done' || data === 'cp_photos_skip') {
+      return showCpOptions(chatId, state);
+    }
+    if (data === 'cp_toggle_anon') {
+      state.data.anon = !state.data.anon;
+      return tgApi('editMessageReplyMarkup', {
+        chat_id: chatId, message_id: messageId,
+        reply_markup: tgCpOptionsKeyboard(state, state.isLinked),
+      });
+    }
+    if (data === 'cp_toggle_show') {
+      state.data.show_in_profile = !state.data.show_in_profile;
+      return tgApi('editMessageReplyMarkup', {
+        chat_id: chatId, message_id: messageId,
+        reply_markup: tgCpOptionsKeyboard(state, state.isLinked),
+      });
+    }
+    if (data === 'cp_publish') {
+      return publishCpProfile(chatId, state);
+    }
+  }
+
+  // ──── Только для привязанных ────
   if (!u) {
     return tgApi('sendMessage', { chat_id: chatId, text: '🔒 Сначала привяжи аккаунт. Напиши /start' });
   }
 
-  if (data === 'me') {
-    return sendUserProfile(chatId, u);
-  }
-
-  if (data === 'stats') {
-    return sendStats(chatId);
-  }
+  if (data === 'me') return sendUserProfile(chatId, u);
+  if (data === 'site_login') return doSiteLogin(chatId);
 
   if (data === 'friends') {
     const friendsCount = db.prepare("SELECT COUNT(*) c FROM friends WHERE (from_id=? OR to_id=?) AND status='accepted'").get(u.id, u.id).c;
@@ -407,7 +735,7 @@ async function handleTgCallback(cb) {
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [
         [{ text: '🌐 Управлять на сайте', url: SITE_URL }],
-        [{ text: '◀️ Назад', callback_data: 'menu' }],
+        [{ text: '◀️ В меню', callback_data: 'menu' }],
       ]}
     });
   }
@@ -425,34 +753,13 @@ async function handleTgCallback(cb) {
     let text = `💬 <b>Чаты</b>\n\n📩 Непрочитанных: <b>${unread}</b>\n`;
     if (lastChats.length) {
       text += '\n<b>Последние диалоги:</b>\n';
-      lastChats.forEach(c => {
-        text += `• ${tgEsc(c.display_name || c.username)}\n`;
-      });
+      lastChats.forEach(c => { text += `• ${tgEsc(c.display_name || c.username)}\n`; });
     }
     return tgApi('editMessageText', {
       chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [
         [{ text: '🌐 Открыть чаты', url: SITE_URL }],
-        [{ text: '◀️ Назад', callback_data: 'menu' }],
-      ]}
-    });
-  }
-
-  if (data === 'new_profiles') {
-    const last = db.prepare('SELECT name, age, bio, anon, created_at FROM profiles WHERE hidden=0 ORDER BY created_at DESC LIMIT 5').all();
-    let text = `🆕 <b>Последние анкеты</b>\n\n`;
-    if (!last.length) text += 'Пока нет анкет 🤷';
-    else last.forEach(p => {
-      const author = p.anon ? '🥷 Аноним' : '';
-      text += `• <b>${tgEsc(p.name)}</b>${p.age?`, ${p.age}`:''} ${author}\n`;
-      if (p.bio) text += `  <i>${tgEsc(p.bio.slice(0, 80))}${p.bio.length>80?'...':''}</i>\n`;
-      text += `\n`;
-    });
-    return tgApi('editMessageText', {
-      chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [
-        [{ text: '🌐 Смотреть все', url: SITE_URL }],
-        [{ text: '◀️ Назад', callback_data: 'menu' }],
+        [{ text: '◀️ В меню', callback_data: 'menu' }],
       ]}
     });
   }
@@ -462,12 +769,12 @@ async function handleTgCallback(cb) {
       chat_id: chatId, message_id: messageId,
       text: `🔔 <b>Настройки уведомлений</b>\n\n` +
             `Сейчас тебе приходят все уведомления.\n\n` +
-            `Чтобы временно отключить — просто отключи бота в Telegram (нажми «Mute» вверху чата).\n\n` +
+            `Чтобы временно отключить — отключи бота в Telegram (Mute).\n\n` +
             `Полностью отвязать аккаунт можно через /unlink`,
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [
         [{ text: '🔌 Отвязать аккаунт', callback_data: 'unlink_confirm' }],
-        [{ text: '◀️ Назад', callback_data: 'menu' }],
+        [{ text: '◀️ В меню', callback_data: 'menu' }],
       ]}
     });
   }
@@ -485,7 +792,7 @@ async function handleTgCallback(cb) {
   }
 
   if (data === 'unlink_yes') {
-    db.prepare('UPDATE users SET tg_id=NULL, tg_link_code=NULL WHERE id=?').run(u.id);
+    db.prepare('UPDATE users SET tg_id=NULL, tg_link_code=NULL, tg_login_code=NULL, tg_login_code_expires=NULL WHERE id=?').run(u.id);
     return tgApi('editMessageText', {
       chat_id: chatId, message_id: messageId,
       text: `🔌 Готово, аккаунт <b>${tgEsc(u.username)}</b> отвязан.\n\nСпасибо что был с нами 👋\n\nЕсли передумаешь — напиши /start`,
@@ -701,6 +1008,8 @@ addCol('users', 'socials',       "TEXT DEFAULT '{}'");
 addCol('users', 'anon_mode',     'INTEGER NOT NULL DEFAULT 0');
 addCol('users', 'tg_link_code',  'TEXT DEFAULT NULL');
 addCol('users', 'tg_id',         'INTEGER DEFAULT NULL');
+addCol('users', 'tg_login_code', 'TEXT DEFAULT NULL');
+addCol('users', 'tg_login_code_expires', 'INTEGER DEFAULT NULL');
 addCol('profiles', 'avatar',     'TEXT DEFAULT NULL');
 addCol('profiles', 'photos',     "TEXT DEFAULT '[]'");
 addCol('profiles', 'anon',       'INTEGER NOT NULL DEFAULT 0');
@@ -969,6 +1278,21 @@ app.post('/api/auth/login', (req,res) => {
   res.json({ user: publicUser(u), token });
 });
 
+// Вход на сайт по одноразовому коду из Telegram-бота
+app.post('/api/auth/tg-login', (req,res) => {
+  const raw = String((req.body||{}).code || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if (!/^[A-Z0-9]{6}$/.test(raw)) return res.status(400).json({error:'Неверный формат кода'});
+  const u = db.prepare('SELECT * FROM users WHERE tg_login_code=? AND tg_login_code_expires > ? AND tg_id IS NOT NULL')
+    .get(raw, Date.now());
+  if (!u) return res.status(401).json({error:'Код неверный или истёк. Запроси новый через /login в боте'});
+  if (u.banned) return res.status(403).json({error:'Аккаунт заблокирован'});
+  // Одноразовый — гасим
+  db.prepare('UPDATE users SET tg_login_code=NULL, tg_login_code_expires=NULL WHERE id=?').run(u.id);
+  const token = issueToken(u, res);
+  audit(u, 'tg_login');
+  res.json({ user: publicUser(u), token });
+});
+
 app.post('/api/auth/logout', (req,res) => { res.clearCookie('token'); res.json({ok:true}); });
 app.get('/api/auth/me', (req,res) => res.json({ user: req.user ? publicUser(req.user) : null }));
 
@@ -1189,6 +1513,45 @@ app.get('/api/profiles/:id', (req,res) => {
   }
   const comments = db.prepare('SELECT * FROM comments WHERE profile_id=? ORDER BY created_at ASC').all(row.id);
   res.json({ profile: pub, comments: comments.map(publicComment) });
+});
+
+// Анонимная публикация анкеты (без авторизации)
+// Отдельный rate-limit по IP: 1 запрос в минуту
+const _anonRate = new Map();
+app.post('/api/profiles/anon', (req,res) => {
+  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const last = _anonRate.get(ip) || 0;
+  if (now - last < 60_000) return res.status(429).json({error:'Слишком часто, подожди минуту'});
+  // чистим раз в ~100 записей чтобы карта не росла бесконечно
+  if (_anonRate.size > 500) {
+    for (const [k,v] of _anonRate) if (now - v > 10*60_000) _anonRate.delete(k);
+  }
+  const { name, age, emoji, color, bio, tags } = req.body||{};
+  if (!name || !String(name).trim()) return res.status(400).json({error:'Имя обязательно'});
+  _anonRate.set(ip, now);
+  const info = db.prepare(`INSERT INTO profiles(owner_id,name,age,emoji,color,bio,tags,anon,show_in_profile,created_at) VALUES(NULL,?,?,?,?,?,?,1,0,?)`)
+    .run(
+      String(name).slice(0,50),
+      +age||null,
+      (emoji||'').slice(0,8) || '👤',
+      (color||'').slice(0,16) || '#e8632a',
+      (bio||'').slice(0,2000),
+      JSON.stringify(Array.isArray(tags)?tags.slice(0,10):[]),
+      now
+    );
+  const p = db.prepare('SELECT * FROM profiles WHERE id=?').get(info.lastInsertRowid);
+  io.emit('profile:created', publicProfile(p));
+  io.emit('stats:update');
+  audit(null, 'create_profile_anon', `#${p.id} ip=${ip}`);
+  if (TG_BOT_TOKEN && !p.hidden) {
+    try {
+      const subs = db.prepare('SELECT tg_id FROM users WHERE tg_id IS NOT NULL AND banned=0').all();
+      const text = `🆕 Новая анкета: <b>${tgEsc(p.name)}</b>${p.age?`, ${p.age} лет`:''}\nОт: <b>🥷 Аноним</b>${p.bio?`\n\n${tgEsc(p.bio.slice(0,200))}`:''}\n\n${SITE_URL}`;
+      for (const s of subs) tgApi('sendMessage', { chat_id: s.tg_id, text, parse_mode: 'HTML', disable_web_page_preview: true });
+    } catch(e) { console.warn('TG notify new anon profile:', e.message); }
+  }
+  res.json({ profile: publicProfile(p) });
 });
 
 app.post('/api/profiles', requireAuth, (req,res) => {
