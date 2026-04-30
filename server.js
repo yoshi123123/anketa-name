@@ -18,22 +18,117 @@ const OWNER_PASSWORD = process.env.OWNER_PASSWORD  || 'glom123';
 const DB_PATH        = process.env.DB_PATH         || path.join(__dirname, 'db.sqlite');
 const UPLOADS_DIR    = process.env.UPLOADS_DIR     || path.join(__dirname, 'public', 'uploads');
 const SITE_URL       = process.env.SITE_URL        || 'http://localhost:3000';
+const TG_BOT_TOKEN   = process.env.TG_BOT_TOKEN    || '';
+const TG_BOT_USERNAME = process.env.TG_BOT_USERNAME || 'anketaforum_bot';
 
 if (JWT_SECRET === 'dev_only_change_me')
   console.warn('⚠  JWT_SECRET не задан — небезопасный дефолт');
 
-// ── TELEGRAM (необязательно) ────────────────────────────────────────
-let tgBot = null;
-if (process.env.TELEGRAM_BOT_TOKEN) {
-  try   { tgBot = require('./bot'); console.log('✓ Telegram бот'); }
-  catch (e) { console.warn('Telegram бот не загружен:', e.message); }
-}
+// ── TELEGRAM BOT ────────────────────────────────────────────────────
 const tgEsc = s => String(s||'').replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
-function tgNotify(userId, text) {
-  if (!tgBot) return;
-  try { const l = db.prepare('SELECT tg_id FROM tg_links WHERE user_id=?').get(userId); if (l?.tg_id) tgBot.sendNotification(l.tg_id, text); } catch {}
+
+async function tgApi(method, params) {
+  if (!TG_BOT_TOKEN) return null;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await r.json();
+  } catch(e) { console.warn('TG API error:', e.message); return null; }
 }
-function tgNotifyOwner(text) { if (tgBot) try { tgBot.notifyOwner(text); } catch {} }
+
+function tgNotify(userId, text) {
+  if (!TG_BOT_TOKEN) return;
+  try {
+    const u = db.prepare('SELECT tg_id FROM users WHERE id=?').get(userId);
+    if (u?.tg_id) {
+      tgApi('sendMessage', { chat_id: u.tg_id, text, parse_mode: 'HTML', disable_web_page_preview: true });
+    }
+  } catch {}
+}
+
+function tgNotifyOwner(text) {
+  if (!TG_BOT_TOKEN) return;
+  try {
+    const owner = db.prepare("SELECT tg_id FROM users WHERE role='owner' AND tg_id IS NOT NULL LIMIT 1").get();
+    if (owner?.tg_id) tgApi('sendMessage', { chat_id: owner.tg_id, text, parse_mode: 'HTML' });
+  } catch {}
+}
+
+// Генерация кода привязки
+function generateLinkCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+// Long polling
+let tgOffset = 0;
+async function tgPoll() {
+  if (!TG_BOT_TOKEN) return;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?timeout=30&offset=${tgOffset}`);
+    const data = await r.json();
+    if (data.ok && data.result) {
+      for (const upd of data.result) {
+        tgOffset = upd.update_id + 1;
+        if (upd.message) await handleTgMessage(upd.message);
+      }
+    }
+  } catch(e) { console.warn('TG poll error:', e.message); await new Promise(r => setTimeout(r, 5000)); }
+  setImmediate(tgPoll);
+}
+
+async function handleTgMessage(msg) {
+  const chatId = msg.chat.id;
+  const text = (msg.text || '').trim();
+  const fromName = msg.from.first_name || msg.from.username || 'друг';
+
+  if (text === '/start') {
+    // Проверим уже привязан ли
+    const linked = db.prepare('SELECT username, display_name FROM users WHERE tg_id=?').get(chatId);
+    if (linked) {
+      return tgApi('sendMessage', { chat_id: chatId, text: `Привет, ${fromName}!\n\nТы уже привязан к аккаунту <b>${linked.display_name || linked.username}</b>.\n\nЯ буду присылать уведомления о:\n• новых анкетах\n• комментариях к твоей анкете\n• сообщениях в личке\n• заявках в друзья\n\nКоманды:\n/unlink — отвязать аккаунт\n/site — открыть сайт`, parse_mode: 'HTML' });
+    }
+    return tgApi('sendMessage', { chat_id: chatId, text: `Привет, ${fromName}! 👋\n\nЯ бот сайта <b>ANKETA.FORUM</b>. Я буду присылать тебе уведомления о новых событиях.\n\nЧтобы привязать аккаунт:\n1️⃣ Зайди на ${SITE_URL}\n2️⃣ Открой настройки → Telegram\n3️⃣ Нажми «Получить код»\n4️⃣ Пришли мне этот код сюда`, parse_mode: 'HTML' });
+  }
+
+  if (text === '/unlink') {
+    const u = db.prepare('SELECT id, username FROM users WHERE tg_id=?').get(chatId);
+    if (!u) return tgApi('sendMessage', { chat_id: chatId, text: 'Аккаунт не привязан.' });
+    db.prepare('UPDATE users SET tg_id=NULL, tg_link_code=NULL WHERE id=?').run(u.id);
+    return tgApi('sendMessage', { chat_id: chatId, text: `✓ Аккаунт <b>${u.username}</b> отвязан. Уведомления больше не будут приходить.`, parse_mode: 'HTML' });
+  }
+
+  if (text === '/site') {
+    return tgApi('sendMessage', { chat_id: chatId, text: `🌐 ${SITE_URL}` });
+  }
+
+  // Проверяем код привязки
+  const code = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length === 6) {
+    const u = db.prepare('SELECT id, username, display_name FROM users WHERE tg_link_code=?').get(code);
+    if (u) {
+      // Проверим не привязан ли этот tg_id к другому
+      const other = db.prepare('SELECT id, username FROM users WHERE tg_id=? AND id!=?').get(chatId, u.id);
+      if (other) {
+        return tgApi('sendMessage', { chat_id: chatId, text: `⚠️ Этот Telegram уже привязан к аккаунту <b>${other.username}</b>. Сначала /unlink.`, parse_mode: 'HTML' });
+      }
+      db.prepare('UPDATE users SET tg_id=?, tg_link_code=NULL WHERE id=?').run(chatId, u.id);
+      return tgApi('sendMessage', { chat_id: chatId, text: `✅ Готово! Аккаунт <b>${u.display_name || u.username}</b> привязан.\n\nТы будешь получать уведомления о новых событиях на сайте.\n\n/unlink — отвязать`, parse_mode: 'HTML' });
+    }
+    return tgApi('sendMessage', { chat_id: chatId, text: '❌ Неверный код или код истёк. Получи новый на сайте в Настройках.' });
+  }
+
+  return tgApi('sendMessage', { chat_id: chatId, text: 'Не понял команду. Напиши /start для инструкции.' });
+}
+
+if (TG_BOT_TOKEN) {
+  console.log('✓ Telegram bot enabled (@' + TG_BOT_USERNAME + ')');
+  setTimeout(tgPoll, 1000);
+} else {
+  console.log('ℹ Telegram bot disabled (no TG_BOT_TOKEN)');
+}
 
 // ── UPLOAD DIRS ─────────────────────────────────────────────────────
 const DIRS = {
@@ -730,6 +825,15 @@ app.post('/api/profiles', requireAuth, (req,res) => {
   io.emit('profile:created', publicProfile(p));
   io.emit('stats:update');
   audit(req.user, 'create_profile', `#${p.id} anon=${p.anon} show_in_profile=${p.show_in_profile}`);
+  // Уведомляем всех привязанных к боту юзеров (кроме автора)
+  if (TG_BOT_TOKEN && !p.hidden) {
+    try {
+      const subs = db.prepare('SELECT tg_id FROM users WHERE tg_id IS NOT NULL AND id!=? AND banned=0').all(req.user.id);
+      const authorName = p.anon ? 'Аноним' : (req.user.display_name || req.user.username);
+      const text = `🆕 Новая анкета: <b>${tgEsc(p.name)}</b>${p.age?`, ${p.age} лет`:''}\nОт: <b>${tgEsc(authorName)}</b>${p.bio?`\n\n${tgEsc(p.bio.slice(0,200))}`:''}\n\n${SITE_URL}`;
+      for (const s of subs) tgApi('sendMessage', { chat_id: s.tg_id, text, parse_mode: 'HTML', disable_web_page_preview: true });
+    } catch(e) { console.warn('TG notify new profile:', e.message); }
+  }
   res.json({ profile: publicProfile(p) });
 });
 
@@ -860,7 +964,7 @@ app.post('/api/profiles/:id/comments', requireAuth, (req,res) => {
   const c = db.prepare('SELECT * FROM comments WHERE id=?').get(info.lastInsertRowid);
   io.to('profile:'+p.id).emit('comment:new', publicComment(c));
   if (p.owner_id && p.owner_id !== req.user.id)
-    tgNotify(p.owner_id, `💬 *${tgEsc(author)}* прокомментировал анкету *${tgEsc(p.name)}*:\n\n_${tgEsc(String(text).slice(0,200))}_\n\n🌐 [Открыть](${tgEsc(SITE_URL)})`);
+    tgNotify(p.owner_id, `💬 <b>${tgEsc(author)}</b> прокомментировал твою анкету <b>${tgEsc(p.name)}</b>:\n\n${tgEsc(String(text).slice(0,200))}\n\n${SITE_URL}`);
   res.json({ comment: publicComment(c) });
 });
 
@@ -880,6 +984,8 @@ app.post('/api/profiles/:id/comments/image', requireAuth, (req,res) => {
       .run(p.id, req.user.id, author, text, rel, avatar, emoji, isAnon?1:0, Date.now());
     const c = db.prepare('SELECT * FROM comments WHERE id=?').get(info.lastInsertRowid);
     io.to('profile:'+p.id).emit('comment:new', publicComment(c));
+    if (p.owner_id && p.owner_id !== req.user.id)
+      tgNotify(p.owner_id, `🖼 <b>${tgEsc(author)}</b> отправил фото в комментарии к анкете <b>${tgEsc(p.name)}</b>${text?`:\n\n${tgEsc(text)}`:''}\n\n${SITE_URL}`);
     res.json({ comment: publicComment(c) });
   });
 });
@@ -1116,6 +1222,7 @@ app.post('/api/friends/request/:id', requireAuth, (req,res) => {
   const now = Date.now();
   db.prepare('INSERT INTO friends(from_id,to_id,status,created_at,updated_at) VALUES(?,?,\'pending\',?,?)').run(req.user.id,toId,now,now);
   io.to('user:'+toId).emit('friend:request', { user: publicUser(req.user) });
+  tgNotify(toId, `📩 <b>${tgEsc(req.user.display_name||req.user.username)}</b> хочет добавить тебя в друзья\n\n${SITE_URL}`);
   res.json({ status:'pending_sent' });
 });
 
@@ -1128,6 +1235,7 @@ app.post('/api/friends/accept/:id', requireAuth, (req,res) => {
   const fromUser = db.prepare('SELECT * FROM users WHERE id=?').get(fromId);
   io.to('user:'+fromId).emit('friend:accepted', { user: publicUser(req.user) });
   io.to('user:'+req.user.id).emit('friend:accepted', { user: publicUser(fromUser) });
+  tgNotify(fromId, `✅ <b>${tgEsc(req.user.display_name||req.user.username)}</b> принял заявку в друзья!`);
   res.json({ status:'friends' });
 });
 
@@ -1371,6 +1479,28 @@ app.delete('/api/reports/:id', requireAdmin, (req, res) => {
   res.json({ ok:true });
 });
 
+// ── TELEGRAM API ────────────────────────────────────────────────────
+app.get('/api/tg/status', requireAuth, (req, res) => {
+  const u = db.prepare('SELECT tg_id FROM users WHERE id=?').get(req.user.id);
+  res.json({
+    enabled: !!TG_BOT_TOKEN,
+    botUsername: TG_BOT_USERNAME,
+    linked: !!u?.tg_id,
+  });
+});
+
+app.post('/api/tg/generate-code', requireAuth, (req, res) => {
+  if (!TG_BOT_TOKEN) return res.status(503).json({ error:'Telegram не настроен' });
+  const code = generateLinkCode();
+  db.prepare('UPDATE users SET tg_link_code=? WHERE id=?').run(code, req.user.id);
+  res.json({ code, botUsername: TG_BOT_USERNAME });
+});
+
+app.post('/api/tg/unlink', requireAuth, (req, res) => {
+  db.prepare('UPDATE users SET tg_id=NULL, tg_link_code=NULL WHERE id=?').run(req.user.id);
+  res.json({ ok:true });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 // Отдаём uploads с кеш-заголовками и оптимизацией
 const uploadsStaticOpts = {
@@ -1423,6 +1553,7 @@ app.post('/api/dm/:userId', requireAuth, (req, res) => {
   const msg = { id: info.lastInsertRowid, from_id: me, to_id: other, text, created_at: now, username: req.user.username, display_name: req.user.display_name, avatar: req.user.avatar, emoji: req.user.emoji };
   io.to('user:'+other).emit('dm:message', msg);
   io.to('user:'+me).emit('dm:message', msg);
+  tgNotify(other, `💬 <b>${tgEsc(req.user.display_name||req.user.username)}</b>:\n${tgEsc(text.slice(0,500))}\n\n${SITE_URL}`);
   res.json({ message: msg });
 });
 app.use((err,_req,res,_next) => { console.error(err); res.status(500).json({error:'Внутренняя ошибка'}); });

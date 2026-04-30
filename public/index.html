@@ -2055,42 +2055,51 @@ async function loadTgLinkSection() {
   const el = document.getElementById('tgLinkBody');
   if (!el) return;
   try {
-    const { linked, tgUsername, linkedAt } = await api('/auth/tg-status');
-    if (linked) {
+    const s = await api('/tg/status');
+    if (!s.enabled) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:12px">⚠️ Бот не настроен на сервере</div>';
+      return;
+    }
+    if (s.linked) {
       el.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;background:var(--bg3);border-radius:var(--r);padding:10px;margin-bottom:8px">
           <span style="font-size:20px">✅</span>
           <div>
-            <div style="font-size:13px;color:var(--white);font-weight:600">Привязан @${esc(tgUsername||'?')}</div>
-            <div style="font-size:11px;color:var(--muted)">${linkedAt ? 'С ' + new Date(linkedAt).toLocaleDateString('ru-RU') : ''}</div>
+            <div style="font-size:13px;color:var(--white);font-weight:600">Telegram привязан</div>
+            <div style="font-size:11px;color:var(--muted)">Уведомления приходят в @${esc(s.botUsername)}</div>
           </div>
         </div>
         <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="unlinkTelegram()">🔓 Отвязать</button>`;
     } else {
       el.innerHTML = `
-        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Привяжи Telegram чтобы получать уведомления о комментариях и создавать анкеты через бота.</p>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Получай уведомления о новых анкетах, комментариях, друзьях и сообщениях прямо в Telegram.</p>
         <button class="btn btn-primary btn-sm" onclick="linkTelegram()">📱 Привязать Telegram</button>`;
     }
-  } catch { el.innerHTML = '<div style="color:var(--muted);font-size:12px">Бот не настроен</div>'; }
+  } catch(e) { el.innerHTML = `<div style="color:var(--muted);font-size:12px">${esc(e.message)}</div>`; }
 }
 
 async function linkTelegram() {
   try {
-    const { code, deepLink } = await api('/auth/tg-link-code', { method:'POST' });
+    const { code, botUsername } = await api('/tg/generate-code', { method:'POST' });
     const el = document.getElementById('tgLinkBody');
     if (!el) return;
     el.innerHTML = `
-      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Выбери способ привязки:</p>
-      ${deepLink ? `<a href="${esc(deepLink)}" target="_blank" class="btn btn-primary btn-sm" style="margin-bottom:8px;display:inline-flex">🤖 Открыть бота</a><br>` : ''}
-      <p style="font-size:12px;color:var(--muted);margin:8px 0">Или отправь боту команду:</p>
-      <div style="background:var(--bg3);border-radius:var(--r);padding:8px 12px;font-family:monospace;font-size:13px;color:var(--accent);margin-bottom:8px">/link ${esc(code)}</div>
-      <button class="btn btn-secondary btn-sm" onclick="loadTgLinkSection()">🔄 Проверить</button>`;
+      <div style="font-size:13px;margin-bottom:8px">1️⃣ Открой бота: <a href="https://t.me/${esc(botUsername)}" target="_blank" style="color:var(--accent)">@${esc(botUsername)}</a></div>
+      <div style="font-size:13px;margin-bottom:8px">2️⃣ Напиши <code style="background:var(--card);padding:1px 6px;border-radius:4px">/start</code></div>
+      <div style="font-size:13px;margin-bottom:8px">3️⃣ Отправь этот код:</div>
+      <div style="background:var(--card);padding:10px;border-radius:6px;text-align:center;font-size:22px;font-weight:700;letter-spacing:4px;font-family:monospace;margin-bottom:10px;border:2px dashed var(--accent)">${esc(code)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <a href="https://t.me/${esc(botUsername)}" target="_blank" class="btn btn-primary btn-sm">🤖 Открыть бота</a>
+        <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${esc(code)}');toast('Код скопирован','ok')">📋 Код</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadTgLinkSection()">🔄 Проверить</button>
+      </div>`;
   } catch(e) { toast(e.message, 'err'); }
 }
 
 async function unlinkTelegram() {
+  if (!confirm('Отвязать Telegram?')) return;
   try {
-    await api('/auth/tg-link', { method:'DELETE' });
+    await api('/tg/unlink', { method:'POST' });
     toast('Telegram отвязан', 'ok');
     loadTgLinkSection();
   } catch(e) { toast(e.message, 'err'); }
