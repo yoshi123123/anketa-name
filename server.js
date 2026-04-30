@@ -2,6 +2,7 @@ require('dotenv').config();
 const path         = require('path');
 const fs           = require('fs');
 const http         = require('http');
+const https        = require('https');
 const express      = require('express');
 const { Server: SocketServer } = require('socket.io');
 const Database     = require('better-sqlite3');
@@ -27,16 +28,44 @@ if (JWT_SECRET === 'dev_only_change_me')
 // ── TELEGRAM BOT ────────────────────────────────────────────────────
 const tgEsc = s => String(s||'').replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
 
+// HTTPS request helper (без зависимости от глобального fetch)
+function httpsJson(urlStr, options = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr);
+    const opts = {
+      hostname: u.hostname,
+      port: 443,
+      path: u.pathname + u.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      timeout: options.timeout || 60000,
+    };
+    const req = https.request(opts, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch(e) { reject(new Error('Bad JSON: ' + body.slice(0,100))); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    if (options.body) req.write(options.body);
+    req.end();
+  });
+}
+
 async function tgApi(method, params) {
   if (!TG_BOT_TOKEN) return null;
   try {
-    const r = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/${method}`, {
+    const body = JSON.stringify(params);
+    return await httpsJson(`https://api.telegram.org/bot${TG_BOT_TOKEN}/${method}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      body,
+      timeout: 15000,
     });
-    return await r.json();
-  } catch(e) { console.warn('TG API error:', e.message); return null; }
+  } catch(e) { console.warn('TG API error:', method, e.message); return null; }
 }
 
 function tgNotify(userId, text) {
@@ -67,16 +96,23 @@ let tgOffset = 0;
 async function tgPoll() {
   if (!TG_BOT_TOKEN) return;
   try {
-    const r = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?timeout=30&offset=${tgOffset}&allowed_updates=${encodeURIComponent(JSON.stringify(['message','callback_query']))}`);
-    const data = await r.json();
-    if (data.ok && data.result) {
+    const data = await httpsJson(
+      `https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?timeout=30&offset=${tgOffset}&allowed_updates=${encodeURIComponent(JSON.stringify(['message','callback_query']))}`,
+      { timeout: 40000 }
+    );
+    if (data && data.ok && Array.isArray(data.result)) {
       for (const upd of data.result) {
         tgOffset = upd.update_id + 1;
-        if (upd.message) await handleTgMessage(upd.message);
-        if (upd.callback_query) await handleTgCallback(upd.callback_query);
+        try {
+          if (upd.message) await handleTgMessage(upd.message);
+          if (upd.callback_query) await handleTgCallback(upd.callback_query);
+        } catch(e) { console.warn('TG handler error:', e.message); }
       }
     }
-  } catch(e) { console.warn('TG poll error:', e.message); await new Promise(r => setTimeout(r, 5000)); }
+  } catch(e) {
+    console.warn('TG poll error:', e.message);
+    await new Promise(r => setTimeout(r, 5000));
+  }
   setImmediate(tgPoll);
 }
 
