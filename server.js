@@ -1957,4 +1957,3 @@ server.listen(PORT, () => {
     console.log(`  В uploads найдено: ${files.length} файлов/папок`);
   } catch(e) { console.warn('  ⚠ Uploads dir error:', e.message); }
 });
-});
