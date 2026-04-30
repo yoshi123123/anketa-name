@@ -153,7 +153,7 @@ function tgMainMenuKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '🌐 Открыть сайт', url: SITE_URL }, { text: '🔑 Войти на сайте', callback_data: 'site_login' }],
-      [{ text: '📝 Создать анкету', callback_data: 'create_profile' }, { text: '📋 Смотреть анкеты', callback_data: 'view_profiles:0' }],
+      [{ text: '📝 Создать анкету', callback_data: 'create_profile' }, { text: '📋 Смотреть анкеты', callback_data: 'vp:0' }],
       [{ text: '👤 Мой профиль', callback_data: 'me' }, { text: '👥 Друзья', callback_data: 'friends' }],
       [{ text: '💬 Чаты', callback_data: 'chats' }, { text: '🔔 Уведомления', callback_data: 'notif_settings' }],
       [{ text: '❓ Помощь', callback_data: 'help' }, { text: '🔌 Отвязать', callback_data: 'unlink_confirm' }],
@@ -167,7 +167,7 @@ function tgGuestMenuKeyboard() {
     inline_keyboard: [
       [{ text: '🌐 Открыть сайт', url: SITE_URL }],
       [{ text: '📝 Создать анкету (анонимно)', callback_data: 'create_profile' }],
-      [{ text: '📋 Смотреть анкеты', callback_data: 'view_profiles:0' }],
+      [{ text: '📋 Смотреть анкеты', callback_data: 'vp:0' }],
       [{ text: '🔐 Как привязать аккаунт?', callback_data: 'how_to_link' }],
       [{ text: '❓ О боте', callback_data: 'about' }],
     ]
@@ -204,17 +204,22 @@ async function handleTgMessage(msg) {
   const text = (msg.text || '').trim();
   const firstName = msg.from?.first_name || 'друг';
 
-  // /cancel сбрасывает state
+  // /cancel сбрасывает любое состояние (создание анкеты или ввод тега)
   if (text === '/cancel') {
-    if (botStates.has(chatId)) {
-      botStates.delete(chatId);
-      return tgApi('sendMessage', { chat_id: chatId, text: '❌ Создание анкеты отменено.' });
+    const hadCp = botStates.has(chatId);
+    const vs = viewStates.get(chatId);
+    const hadSearch = vs?.inputMode;
+    if (hadCp) botStates.delete(chatId);
+    if (hadSearch) vs.inputMode = false;
+    if (hadCp || hadSearch) {
+      return tgApi('sendMessage', { chat_id: chatId, text: hadCp ? '❌ Создание анкеты отменено.' : '❌ Поиск отменён.' });
     }
   }
 
   // /start, /menu, /help — всегда сбрасывают state и показывают меню
   if (text === '/start' || text === '/menu' || text === '/help') {
     botStates.delete(chatId);
+    const vs = viewStates.get(chatId); if (vs) vs.inputMode = false;
     if (text === '/start') {
       const linked = db.prepare('SELECT id, username, display_name, role FROM users WHERE tg_id=?').get(chatId);
       if (linked) {
@@ -281,6 +286,22 @@ async function handleTgMessage(msg) {
       text: '🌐 Открыть сайт:',
       reply_markup: { inline_keyboard: [[{ text: '🚀 ANKETA.FORUM', url: SITE_URL }]] }
     });
+  }
+
+  // ── Если идёт ввод тега для поиска — обрабатываем ──
+  const vsearch = viewStates.get(chatId);
+  if (vsearch?.inputMode) {
+    if (!text) return tgApi('sendMessage', { chat_id: chatId, text: 'Пришли тег текстом.' });
+    vsearch.inputMode = false;
+    const tag = text.replace(/^#/, '').trim().slice(0, 30);
+    if (!tag) return tgApi('sendMessage', { chat_id: chatId, text: 'Пустой тег. Попробуй ещё.' });
+    // Отправим новое сообщение со списком (нет messageId для editMessage)
+    const reply = await tgApi('sendMessage', {
+      chat_id: chatId, text: `🔍 Ищу по тегу <b>${tgEsc(tag)}</b>…`, parse_mode: 'HTML'
+    });
+    const newMid = reply?.result?.message_id;
+    if (newMid) return viewProfilesAt(chatId, newMid, 0, { tag });
+    return;
   }
 
   // ── Если идёт создание анкеты — обрабатываем как часть flow ──
@@ -523,50 +544,180 @@ async function publishCpProfile(chatId, state) {
 }
 
 // ──── ПРОСМОТР АНКЕТ ──────────────────────────────────────────────────
-async function viewProfilesAt(chatId, messageId, offset) {
-  const total = db.prepare('SELECT COUNT(*) c FROM profiles WHERE hidden=0').get().c;
-  if (total === 0) {
-    return tgApi('editMessageText', {
-      chat_id: chatId, message_id: messageId,
-      text: '📋 <b>Анкеты</b>\n\nПока нет анкет 🤷\n\nХочешь создать первую?',
-      parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [
-        [{ text: '📝 Создать анкету', callback_data: 'create_profile' }],
-        [{ text: '◀️ В меню', callback_data: 'menu' }],
-      ]},
+// viewStates: chatId → { tag, offset, inputMode, pendingTags }
+const viewStates = new Map();
+
+function getViewState(chatId) {
+  let s = viewStates.get(chatId);
+  if (!s) { s = { tag: null, offset: 0, inputMode: false, pendingTags: [] }; viewStates.set(chatId, s); }
+  return s;
+}
+
+const VP_PAGE = 5;
+
+function fetchProfilesForList(tag, offset, limit) {
+  if (tag) {
+    const tagL = tag.toLowerCase();
+    const all = db.prepare(`
+      SELECT p.*, u.display_name as a_name, u.username as a_username
+      FROM profiles p LEFT JOIN users u ON u.id = p.owner_id
+      WHERE p.hidden=0
+      ORDER BY p.pinned DESC, p.created_at DESC
+    `).all();
+    const filtered = all.filter(p => {
+      try {
+        const tags = JSON.parse(p.tags || '[]');
+        return tags.some(t => String(t).toLowerCase().includes(tagL));
+      } catch { return false; }
     });
+    return { rows: filtered.slice(offset, offset + limit), total: filtered.length };
   }
-  offset = Math.max(0, Math.min(offset, total - 1));
-  const p = db.prepare(`
+  const total = db.prepare('SELECT COUNT(*) c FROM profiles WHERE hidden=0').get().c;
+  const rows = db.prepare(`
     SELECT p.*, u.display_name as a_name, u.username as a_username
     FROM profiles p LEFT JOIN users u ON u.id = p.owner_id
     WHERE p.hidden=0
-    ORDER BY p.pinned DESC, p.created_at DESC LIMIT 1 OFFSET ?
-  `).get(offset);
-  if (!p) return;
+    ORDER BY p.pinned DESC, p.created_at DESC LIMIT ? OFFSET ?
+  `).all(limit, offset);
+  return { rows, total };
+}
+
+async function viewProfilesAt(chatId, messageId, offset, opts = {}) {
+  const vs = getViewState(chatId);
+  vs.inputMode = false; // выходим из режима ввода если были
+  if (typeof opts.tag !== 'undefined') vs.tag = opts.tag; // null чтобы сбросить
+  vs.offset = Math.max(0, offset|0);
+
+  const { rows, total } = fetchProfilesForList(vs.tag, vs.offset, VP_PAGE);
+
+  if (total === 0) {
+    const text = vs.tag
+      ? `📋 <b>Анкеты</b>\n\nПо тегу «<b>${tgEsc(vs.tag)}</b>» ничего не нашлось 🤷`
+      : '📋 <b>Анкеты</b>\n\nПока нет анкет 🤷\n\nХочешь создать первую?';
+    const kb = [];
+    if (vs.tag) kb.push([{ text: '❌ Сбросить фильтр', callback_data: 'vp_clear' }]);
+    kb.push([{ text: '📝 Создать анкету', callback_data: 'create_profile' }]);
+    kb.push([{ text: '◀️ В меню', callback_data: 'menu' }]);
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: kb },
+    });
+  }
+
+  // Если offset вылез за пределы (например после смены фильтра) — откатываем на первую страницу
+  if (vs.offset >= total) {
+    vs.offset = 0;
+    return viewProfilesAt(chatId, messageId, 0);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / VP_PAGE));
+  const curPage = Math.floor(vs.offset / VP_PAGE) + 1;
+
+  let text = vs.tag
+    ? `📋 <b>Анкеты по тегу «${tgEsc(vs.tag)}»</b> · стр. ${curPage}/${totalPages} · всего ${total}\n\n`
+    : `📋 <b>Свежие анкеты</b> · стр. ${curPage}/${totalPages} · всего ${total}\n\n`;
+
+  rows.forEach((p, i) => {
+    const num = vs.offset + i + 1;
+    const author = p.anon ? '🥷 Аноним' : (p.a_name || p.a_username || 'Кто-то');
+    let tags = [];
+    try { tags = JSON.parse(p.tags || '[]'); } catch {}
+    const tagStr = tags.length ? ' · ' + tags.slice(0,3).map(t => '#'+tgEsc(t)).join(' ') : '';
+    text += `<b>${num}.</b> ${tgEsc(p.name)}${p.age?`, ${p.age}`:''} — ${tgEsc(author)}${tagStr}\n`;
+    if (p.bio) text += `   <i>${tgEsc(p.bio.slice(0, 70))}${p.bio.length>70?'…':''}</i>\n`;
+    text += '\n';
+  });
+  text += `<i>Нажми номер чтобы открыть</i>`;
+
+  // Ряд кнопок-номеров (1..N)
+  const numRow = rows.map((p, i) => ({
+    text: String(vs.offset + i + 1),
+    callback_data: `vp_one:${p.id}`
+  }));
+
+  // Навигация страницами
+  const navRow = [];
+  if (vs.offset > 0) navRow.push({ text: '⬅️', callback_data: `vp:${Math.max(0, vs.offset - VP_PAGE)}` });
+  navRow.push({ text: `${curPage}/${totalPages}`, callback_data: 'vp_noop' });
+  if (vs.offset + VP_PAGE < total) navRow.push({ text: '➡️', callback_data: `vp:${vs.offset + VP_PAGE}` });
+
+  // Фильтр
+  const filterRow = [];
+  if (vs.tag) {
+    filterRow.push({ text: `🔍 #${vs.tag}`, callback_data: 'vp_search' });
+    filterRow.push({ text: '❌ Сбросить', callback_data: 'vp_clear' });
+  } else {
+    filterRow.push({ text: '🔍 Поиск по тегу', callback_data: 'vp_search' });
+  }
+
+  return tgApi('editMessageText', {
+    chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      numRow,
+      navRow,
+      filterRow,
+      [{ text: '📝 Создать', callback_data: 'create_profile' }, { text: '◀️ В меню', callback_data: 'menu' }],
+    ]},
+  });
+}
+
+async function viewOneProfile(chatId, messageId, profileId) {
+  const p = db.prepare(`
+    SELECT p.*, u.display_name as a_name, u.username as a_username
+    FROM profiles p LEFT JOIN users u ON u.id = p.owner_id
+    WHERE p.id=? AND p.hidden=0
+  `).get(profileId|0);
+  if (!p) {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: 'Анкета не найдена 🤷',
+      reply_markup: { inline_keyboard: [[{ text: '◀️ К списку', callback_data: 'vp:0' }]] },
+    });
+  }
   const author = p.anon ? '🥷 Аноним' : (p.a_name || p.a_username || 'Кто-то');
   let tags = [];
   try { tags = JSON.parse(p.tags || '[]'); } catch {}
   let photos = [];
   try { photos = JSON.parse(p.photos || '[]'); } catch {}
   const date = new Date(p.created_at).toLocaleDateString('ru-RU');
+
+  const vs = getViewState(chatId);
+  vs.pendingTags = tags.slice(0, 4); // сохраняем теги для кнопок «клик по тегу»
+
   const text =
     `📋 <b>${tgEsc(p.name)}</b>${p.age?`, ${p.age}`:''}\n` +
     `👤 ${tgEsc(author)} · 📅 ${date}\n` +
-    (tags.length ? `🏷 ${tags.map(t=>tgEsc(t)).join(', ')}\n` : '') +
+    (tags.length ? `🏷 ${tags.map(t=>'#'+tgEsc(t)).join(' ')}\n` : '') +
     (photos.length ? `📷 Фото: ${photos.length}\n` : '') +
-    (p.bio ? `\n${tgEsc(p.bio.slice(0, 600))}${p.bio.length>600?'...':''}` : '') +
-    `\n\n<i>Анкета ${offset + 1} из ${total}</i>`;
-  const navRow = [];
-  if (offset > 0) navRow.push({ text: '⬅️', callback_data: `view_profiles:${offset-1}` });
-  navRow.push({ text: '🌐 На сайте', url: SITE_URL });
-  if (offset < total - 1) navRow.push({ text: '➡️', callback_data: `view_profiles:${offset+1}` });
+    (p.bio ? `\n${tgEsc(p.bio.slice(0, 800))}${p.bio.length>800?'…':''}` : '');
+
+  const keyboard = [];
+  // Клик по тегу — поиск по нему. Используем индекс из pendingTags чтобы поместиться в callback_data.
+  if (vs.pendingTags.length) {
+    keyboard.push(vs.pendingTags.map((t, i) => ({
+      text: '#' + (String(t).length > 16 ? String(t).slice(0,16)+'…' : String(t)),
+      callback_data: `vp_tag:${i}`,
+    })));
+  }
+  keyboard.push([
+    { text: '🌐 На сайте', url: SITE_URL },
+    { text: '◀️ К списку', callback_data: `vp:${vs.offset || 0}` },
+  ]);
+
   return tgApi('editMessageText', {
     chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
-    reply_markup: { inline_keyboard: [
-      navRow,
-      [{ text: '📝 Создать свою', callback_data: 'create_profile' }, { text: '◀️ В меню', callback_data: 'menu' }],
-    ]},
+    reply_markup: { inline_keyboard: keyboard },
+  });
+}
+
+async function viewSearchPrompt(chatId, messageId) {
+  const vs = getViewState(chatId);
+  vs.inputMode = true;
+  return tgApi('editMessageText', {
+    chat_id: chatId, message_id: messageId,
+    text: `🔍 <b>Поиск по тегу</b>\n\nПришли тег одним сообщением (без #).\n\nНапример: <code>музыка</code> или <code>кино</code>\n\nОтменить: /cancel`,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [[{ text: '❌ Отмена', callback_data: `vp:${vs.offset||0}` }]] },
   });
 }
 
@@ -675,10 +826,28 @@ async function handleTgCallback(cb) {
     return startCpFlow(chatId);
   }
 
-  // Просмотр анкет доступен всем
-  if (data.startsWith('view_profiles:')) {
+  // Просмотр анкет — список (доступно всем)
+  if (data === 'vp_noop') return; // счётчик страницы — клик ничего не делает
+  if (data.startsWith('vp:')) {
     const offset = parseInt(data.split(':')[1], 10) || 0;
     return viewProfilesAt(chatId, messageId, offset);
+  }
+  if (data.startsWith('vp_one:')) {
+    const id = parseInt(data.split(':')[1], 10) || 0;
+    return viewOneProfile(chatId, messageId, id);
+  }
+  if (data === 'vp_search') {
+    return viewSearchPrompt(chatId, messageId);
+  }
+  if (data === 'vp_clear') {
+    return viewProfilesAt(chatId, messageId, 0, { tag: null });
+  }
+  if (data.startsWith('vp_tag:')) {
+    const idx = parseInt(data.split(':')[1], 10);
+    const vs = getViewState(chatId);
+    const tag = vs.pendingTags[idx];
+    if (tag) return viewProfilesAt(chatId, messageId, 0, { tag: String(tag) });
+    return viewProfilesAt(chatId, messageId, 0);
   }
 
   // ──── Шаги создания анкеты ────
