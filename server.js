@@ -1880,16 +1880,25 @@ app.post('/api/tg/unlink', requireAuth, (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
-// Отдаём uploads с кеш-заголовками и оптимизацией
+
+// ── UPLOADS — отдаём файлы из обоих возможных мест ──────────────────
 const uploadsStaticOpts = {
-  maxAge: '7d',
-  immutable: true,
+  maxAge: '30d',
   setHeaders: (res) => {
-    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    res.setHeader('Cache-Control', 'public, max-age=2592000');
   }
 };
+
+// Отдаём из volume (Railway: /data/uploads)
 app.use('/uploads', express.static(UPLOADS_DIR, uploadsStaticOpts));
+// Fallback из public/uploads (старые файлы которые могли остаться)
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads'), uploadsStaticOpts));
+
+// Логируем 404 на uploads — чтобы видеть в логах если файл реально потерян
+app.use('/uploads', (req, res) => {
+  console.warn('[UPLOAD 404]', req.path, '— проверь что файл существует в', UPLOADS_DIR);
+  res.status(404).send('Not Found');
+});
 
 // ── DIRECT MESSAGES ─────────────────────────────────────────────────
 app.get('/api/dm/unread-count', requireAuth, (req, res) => {
@@ -1940,4 +1949,12 @@ app.use((err,_req,res,_next) => { console.error(err); res.status(500).json({erro
 server.listen(PORT, () => {
   console.log(`✓ Сервер: http://localhost:${PORT}`);
   console.log(`  БД: ${DB_PATH}`);
+  console.log(`  Uploads: ${UPLOADS_DIR}`);
+  // Проверяем что директория существует и пишется в неё
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    const files = fs.readdirSync(UPLOADS_DIR);
+    console.log(`  В uploads найдено: ${files.length} файлов/папок`);
+  } catch(e) { console.warn('  ⚠ Uploads dir error:', e.message); }
+});
 });
