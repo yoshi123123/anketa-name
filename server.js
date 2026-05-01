@@ -204,21 +204,27 @@ async function handleTgMessage(msg) {
   const text = (msg.text || '').trim();
   const firstName = msg.from?.first_name || 'друг';
 
-  // /cancel сбрасывает любое состояние (создание анкеты или ввод тега)
+  // /cancel сбрасывает любое состояние
   if (text === '/cancel') {
     const hadCp = botStates.has(chatId);
     const vs = viewStates.get(chatId);
     const hadSearch = vs?.inputMode;
+    const hadEdit = editStates.has(chatId);
     if (hadCp) botStates.delete(chatId);
     if (hadSearch) vs.inputMode = false;
-    if (hadCp || hadSearch) {
-      return tgApi('sendMessage', { chat_id: chatId, text: hadCp ? '❌ Создание анкеты отменено.' : '❌ Поиск отменён.' });
+    if (hadEdit) editStates.delete(chatId);
+    if (hadCp || hadSearch || hadEdit) {
+      const what = hadCp ? '❌ Создание анкеты отменено.'
+                : hadSearch ? '❌ Поиск отменён.'
+                : '❌ Редактирование отменено.';
+      return tgApi('sendMessage', { chat_id: chatId, text: what });
     }
   }
 
   // /start, /menu, /help — всегда сбрасывают state и показывают меню
   if (text === '/start' || text === '/menu' || text === '/help') {
     botStates.delete(chatId);
+    editStates.delete(chatId);
     const vs = viewStates.get(chatId); if (vs) vs.inputMode = false;
     if (text === '/start') {
       const linked = db.prepare('SELECT id, username, display_name, role FROM users WHERE tg_id=?').get(chatId);
@@ -286,6 +292,12 @@ async function handleTgMessage(msg) {
       text: '🌐 Открыть сайт:',
       reply_markup: { inline_keyboard: [[{ text: '🚀 ANKETA.FORUM', url: SITE_URL }]] }
     });
+  }
+
+  // ── Если идёт редактирование профиля сайта — обрабатываем первым ──
+  if (editStates.has(chatId)) {
+    const handled = await applyEditField(chatId, msg);
+    if (handled) return;
   }
 
   // ── Если идёт ввод тега для поиска — обрабатываем ──
@@ -679,20 +691,20 @@ async function viewOneProfile(chatId, messageId, profileId) {
   try { tags = JSON.parse(p.tags || '[]'); } catch {}
   let photos = [];
   try { photos = JSON.parse(p.photos || '[]'); } catch {}
+  // Включаем аватарку как первое фото если её нет в массиве photos
+  if (p.avatar && !photos.includes(p.avatar)) photos = [p.avatar, ...photos];
   const date = new Date(p.created_at).toLocaleDateString('ru-RU');
 
   const vs = getViewState(chatId);
-  vs.pendingTags = tags.slice(0, 4); // сохраняем теги для кнопок «клик по тегу»
+  vs.pendingTags = tags.slice(0, 4);
 
-  const text =
+  const baseText =
     `📋 <b>${tgEsc(p.name)}</b>${p.age?`, ${p.age}`:''}\n` +
     `👤 ${tgEsc(author)} · 📅 ${date}\n` +
     (tags.length ? `🏷 ${tags.map(t=>'#'+tgEsc(t)).join(' ')}\n` : '') +
-    (photos.length ? `📷 Фото: ${photos.length}\n` : '') +
     (p.bio ? `\n${tgEsc(p.bio.slice(0, 800))}${p.bio.length>800?'…':''}` : '');
 
   const keyboard = [];
-  // Клик по тегу — поиск по нему. Используем индекс из pendingTags чтобы поместиться в callback_data.
   if (vs.pendingTags.length) {
     keyboard.push(vs.pendingTags.map((t, i) => ({
       text: '#' + (String(t).length > 16 ? String(t).slice(0,16)+'…' : String(t)),
@@ -704,8 +716,37 @@ async function viewOneProfile(chatId, messageId, profileId) {
     { text: '◀️ К списку', callback_data: `vp:${vs.offset || 0}` },
   ]);
 
+  // Если есть фото — отправляем их и текст отдельно
+  if (photos.length) {
+    // Удаляем сообщение со списком, чтобы не было нагромождения
+    try { await tgApi('deleteMessage', { chat_id: chatId, message_id: messageId }); } catch {}
+    const urls = photos.slice(0, 10).map(rel => SITE_URL.replace(/\/$/, '') + rel);
+    const captionPart = (baseText.length > 1000 ? baseText.slice(0, 1000) + '…' : baseText);
+    if (urls.length === 1) {
+      // Одно фото — sendPhoto с caption и кнопками
+      await tgApi('sendPhoto', {
+        chat_id: chatId, photo: urls[0],
+        caption: captionPart, parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: keyboard },
+      });
+    } else {
+      // Несколько — sendMediaGroup (без кнопок) + сообщение с текстом и кнопками
+      const media = urls.map((u, i) => ({
+        type: 'photo', media: u,
+        ...(i === 0 ? { caption: captionPart, parse_mode: 'HTML' } : {}),
+      }));
+      await tgApi('sendMediaGroup', { chat_id: chatId, media });
+      await tgApi('sendMessage', {
+        chat_id: chatId, text: '👆 Анкета · действия:',
+        reply_markup: { inline_keyboard: keyboard },
+      });
+    }
+    return;
+  }
+
+  // Без фото — обычное editMessageText
   return tgApi('editMessageText', {
-    chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+    chat_id: chatId, message_id: messageId, text: baseText, parse_mode: 'HTML',
     reply_markup: { inline_keyboard: keyboard },
   });
 }
@@ -722,25 +763,274 @@ async function viewSearchPrompt(chatId, messageId) {
 }
 
 async function sendUserProfile(chatId, u) {
+  return showMyProfile(chatId, null, u);
+}
+
+// ──── МОЙ ПРОФИЛЬ + РЕДАКТИРОВАНИЕ ─────────────────────────────────
+// editStates: chatId → { field: 'displayName'|'bio'|'status'|'location'|'emoji'|'avatar'|'banner' }
+const editStates = new Map();
+
+async function showMyProfile(chatId, messageId, u) {
+  editStates.delete(chatId);
   const profilesCount = db.prepare('SELECT COUNT(*) c FROM profiles WHERE owner_id=?').get(u.id).c;
   const friendsCount = db.prepare("SELECT COUNT(*) c FROM friends WHERE (from_id=? OR to_id=?) AND status='accepted'").get(u.id, u.id).c;
   const unread = db.prepare('SELECT COUNT(*) c FROM dm_messages WHERE to_id=? AND read_at IS NULL').get(u.id).c;
   const incoming = db.prepare("SELECT COUNT(*) c FROM friends WHERE to_id=? AND status='pending'").get(u.id).c;
   const roleLabel = { owner:'👑 Главный админ', admin:'⚙️ Админ', moderator:'🛡 Модератор', user:'👤 Пользователь' }[u.role] || u.role;
   const text =
-    `👤 <b>${tgEsc(u.display_name || u.username)}</b>\n` +
+    `${u.emoji||'👤'} <b>${tgEsc(u.display_name || u.username)}</b>\n` +
     `🆔 @${tgEsc(u.username)}\n` +
     `🎭 ${roleLabel}\n` +
-    `📅 С нами с ${new Date(u.created_at).toLocaleDateString('ru-RU')}\n\n` +
-    `📋 Моих анкет: <b>${profilesCount}</b>\n` +
+    (u.status ? `💭 ${tgEsc(u.status)}\n` : '') +
+    (u.location ? `📍 ${tgEsc(u.location)}\n` : '') +
+    `📅 С нами с ${new Date(u.created_at).toLocaleDateString('ru-RU')}\n` +
+    (u.bio ? `\n📝 <i>${tgEsc(u.bio.slice(0, 300))}${u.bio.length>300?'…':''}</i>\n` : '') +
+    `\n📋 Моих анкет: <b>${profilesCount}</b>\n` +
     `👥 Друзей: <b>${friendsCount}</b>\n` +
     (incoming > 0 ? `📩 Новых заявок: <b>${incoming}</b>\n` : '') +
-    (unread > 0 ? `💬 Непрочитанных сообщений: <b>${unread}</b>` : '');
-  return tgApi('sendMessage', {
-    chat_id: chatId, text, parse_mode: 'HTML',
+    (unread > 0 ? `💬 Непрочитанных сообщений: <b>${unread}</b>\n` : '');
+  const keyboard = [
+    [{ text: '✏️ Редактировать профиль', callback_data: 'edit_profile' }],
+    [{ text: '👥 Мои друзья', callback_data: 'friends' }, { text: '🌐 На сайте', url: SITE_URL }],
+    [{ text: '◀️ В меню', callback_data: 'menu' }],
+  ];
+  if (messageId) {
+    return tgApi('editMessageText', { chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
+  }
+  return tgApi('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
+}
+
+async function showEditMenu(chatId, messageId, u) {
+  editStates.delete(chatId);
+  const text =
+    `✏️ <b>Редактирование профиля</b>\n\n` +
+    `Никнейм: <b>${tgEsc(u.display_name || u.username)}</b>\n` +
+    `Эмодзи: ${u.emoji || '👤'}\n` +
+    `Статус: ${u.status ? `<i>${tgEsc(u.status)}</i>` : '<i>не указан</i>'}\n` +
+    `Локация: ${u.location ? `<i>${tgEsc(u.location)}</i>` : '<i>не указана</i>'}\n` +
+    `О себе: ${u.bio ? `<i>${tgEsc(u.bio.slice(0,80))}${u.bio.length>80?'…':''}</i>` : '<i>не указано</i>'}\n` +
+    `Аватарка: ${u.avatar ? '✅ есть' : '⬜️ нет'}\n` +
+    `Баннер: ${u.banner ? '✅ есть' : '⬜️ нет'}\n\n` +
+    `<i>Что меняем?</i>`;
+  return tgApi('editMessageText', {
+    chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
     reply_markup: { inline_keyboard: [
-      [{ text: '🌐 Открыть профиль', url: SITE_URL }],
-      [{ text: '◀️ В меню', callback_data: 'menu' }],
+      [{ text: '📝 Никнейм', callback_data: 'edit_field:displayName' }, { text: '😀 Эмодзи', callback_data: 'edit_field:emoji' }],
+      [{ text: '💭 Статус', callback_data: 'edit_field:status' }, { text: '📍 Локация', callback_data: 'edit_field:location' }],
+      [{ text: '📃 О себе (bio)', callback_data: 'edit_field:bio' }],
+      [{ text: '🖼 Аватарка', callback_data: 'edit_field:avatar' }, { text: '🌅 Баннер', callback_data: 'edit_field:banner' }],
+      [{ text: '◀️ Назад в профиль', callback_data: 'me_back' }],
+    ]},
+  });
+}
+
+async function startEditField(chatId, messageId, u, field) {
+  const prompts = {
+    displayName: { label: 'никнейм', max: 30, hint: '3–30 символов' },
+    emoji:       { label: 'эмодзи', max: 8,  hint: 'один эмодзи, например 🚀' },
+    status:      { label: 'статус', max: 60, hint: 'короткая строка статуса' },
+    location:    { label: 'локацию', max: 60, hint: 'город или страна' },
+    bio:         { label: 'bio (о себе)', max: 500, hint: 'до 500 символов' },
+    avatar:      { label: 'аватарку', isPhoto: true },
+    banner:      { label: 'баннер', isPhoto: true },
+  };
+  const p = prompts[field];
+  if (!p) return;
+  editStates.set(chatId, { field });
+  if (p.isPhoto) {
+    const kb = [];
+    if ((field === 'avatar' && u.avatar) || (field === 'banner' && u.banner)) {
+      kb.push([{ text: '🗑 Удалить', callback_data: field === 'avatar' ? 'edit_avatar_remove' : 'edit_banner_remove' }]);
+    }
+    kb.push([{ text: '❌ Отмена', callback_data: 'edit_cancel' }]);
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `📷 <b>Загрузка ${p.label}и</b>\n\nПришли фото${field === 'banner' ? ' (рекомендуемый формат: широкое, ~3:1)' : ''}.\n\n<i>/cancel — отменить</i>`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: kb },
+    });
+  }
+  const current = (field === 'displayName' ? u.display_name : u[field]) || '';
+  return tgApi('editMessageText', {
+    chat_id: chatId, message_id: messageId,
+    text: `✏️ <b>Изменить ${p.label}</b>\n\n` +
+          (current ? `Текущее значение: <code>${tgEsc(String(current))}</code>\n\n` : '') +
+          `Пришли новое значение одним сообщением (${p.hint}).\n\n` +
+          `<i>/cancel — отменить</i>`,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [[{ text: '❌ Отмена', callback_data: 'edit_cancel' }]] },
+  });
+}
+
+async function applyEditField(chatId, msg) {
+  const st = editStates.get(chatId);
+  if (!st) return false;
+  const u = db.prepare('SELECT * FROM users WHERE tg_id=?').get(chatId);
+  if (!u) { editStates.delete(chatId); return false; }
+
+  // ── Загрузка фото для аватарки/баннера ──
+  if (st.field === 'avatar' || st.field === 'banner') {
+    let fileId = null;
+    if (msg.photo?.length) fileId = msg.photo[msg.photo.length - 1].file_id;
+    else if (msg.document && /^image\//.test(msg.document.mime_type || '')) fileId = msg.document.file_id;
+    if (!fileId) {
+      await tgApi('sendMessage', { chat_id: chatId, text: 'Пришли фото (картинку), пожалуйста.' });
+      return true;
+    }
+    const filename = await tgDownloadPhoto(fileId, DIRS.avatars);
+    if (!filename) {
+      await tgApi('sendMessage', { chat_id: chatId, text: '⚠️ Не удалось скачать фото, попробуй ещё.' });
+      return true;
+    }
+    const rel = '/uploads/avatars/' + filename;
+    const oldField = st.field === 'avatar' ? u.avatar : u.banner;
+    if (oldField) { try { removeFile(oldField); } catch {} }
+    if (st.field === 'avatar') {
+      db.prepare('UPDATE users SET avatar=? WHERE id=?').run(rel, u.id);
+    } else {
+      db.prepare('UPDATE users SET banner=? WHERE id=?').run(rel, u.id);
+    }
+    editStates.delete(chatId);
+    const updated = db.prepare('SELECT * FROM users WHERE id=?').get(u.id);
+    audit(updated, st.field === 'avatar' ? 'avatar_change_via_bot' : 'banner_change_via_bot');
+    await tgApi('sendMessage', {
+      chat_id: chatId,
+      text: `✅ ${st.field === 'avatar' ? 'Аватарка обновлена' : 'Баннер обновлён'}`,
+      reply_markup: { inline_keyboard: [
+        [{ text: '◀️ К редактированию', callback_data: 'edit_profile' }],
+        [{ text: '👤 Мой профиль', callback_data: 'me_back' }],
+      ]},
+    });
+    return true;
+  }
+
+  // ── Текстовое поле ──
+  const text = (msg.text || '').trim();
+  if (!text) {
+    await tgApi('sendMessage', { chat_id: chatId, text: 'Пришли текст.' });
+    return true;
+  }
+  const limits = { displayName: 30, emoji: 8, status: 60, location: 60, bio: 500 };
+  const value = text.slice(0, limits[st.field] || 100);
+  const dbField = { displayName: 'display_name', emoji: 'emoji', status: 'status', location: 'location', bio: 'bio' }[st.field];
+  if (!dbField) { editStates.delete(chatId); return true; }
+
+  if (st.field === 'displayName') {
+    if (value.length < 3) {
+      await tgApi('sendMessage', { chat_id: chatId, text: 'Никнейм должен быть от 3 символов.' });
+      return true;
+    }
+  }
+
+  db.prepare(`UPDATE users SET ${dbField}=? WHERE id=?`).run(value, u.id);
+  editStates.delete(chatId);
+  const updated = db.prepare('SELECT * FROM users WHERE id=?').get(u.id);
+  audit(updated, 'profile_edit_via_bot', `${st.field}=${value.slice(0,40)}`);
+  await tgApi('sendMessage', {
+    chat_id: chatId,
+    text: `✅ Обновлено: <b>${tgEsc(value.slice(0, 80))}</b>${value.length > 80 ? '…' : ''}`,
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      [{ text: '◀️ К редактированию', callback_data: 'edit_profile' }],
+      [{ text: '👤 Мой профиль', callback_data: 'me_back' }],
+    ]},
+  });
+  return true;
+}
+
+// ──── СПИСОК ДРУЗЕЙ ──────────────────────────────────────────────
+const FRIENDS_PAGE = 8;
+async function showFriendsList(chatId, messageId, u, offset) {
+  const total = db.prepare("SELECT COUNT(*) c FROM friends WHERE (from_id=? OR to_id=?) AND status='accepted'").get(u.id, u.id).c;
+  const incoming = db.prepare("SELECT COUNT(*) c FROM friends WHERE to_id=? AND status='pending'").get(u.id).c;
+  const outgoing = db.prepare("SELECT COUNT(*) c FROM friends WHERE from_id=? AND status='pending'").get(u.id).c;
+
+  if (total === 0) {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: `👥 <b>Мои друзья</b>\n\nПока пусто 🤷\n\n` +
+            (incoming > 0 ? `📩 Входящих заявок: <b>${incoming}</b>\n` : '') +
+            (outgoing > 0 ? `📤 Исходящих: <b>${outgoing}</b>\n` : '') +
+            `\nДобавляй друзей на сайте.`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [
+        [{ text: '🌐 Найти друзей на сайте', url: SITE_URL }],
+        [{ text: '◀️ В меню', callback_data: 'menu' }],
+      ]},
+    });
+  }
+
+  offset = Math.max(0, Math.min(offset, Math.max(0, total - 1)));
+  const rows = db.prepare(`
+    SELECT u.*, f.created_at as friend_since
+    FROM friends f
+    JOIN users u ON u.id = CASE WHEN f.from_id=? THEN f.to_id ELSE f.from_id END
+    WHERE (f.from_id=? OR f.to_id=?) AND f.status='accepted'
+    ORDER BY f.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(u.id, u.id, u.id, FRIENDS_PAGE, offset);
+
+  const totalPages = Math.max(1, Math.ceil(total / FRIENDS_PAGE));
+  const curPage = Math.floor(offset / FRIENDS_PAGE) + 1;
+
+  let text = `👥 <b>Мои друзья</b> · стр. ${curPage}/${totalPages} · всего ${total}\n`;
+  if (incoming > 0) text += `📩 Входящих заявок: <b>${incoming}</b>\n`;
+  if (outgoing > 0) text += `📤 Исходящих: <b>${outgoing}</b>\n`;
+  text += '\n';
+  rows.forEach((f, i) => {
+    const num = offset + i + 1;
+    const since = new Date(f.friend_since).toLocaleDateString('ru-RU');
+    text += `<b>${num}.</b> ${f.emoji||'👤'} ${tgEsc(f.display_name || f.username)} <i>· @${tgEsc(f.username)} · с ${since}</i>\n`;
+  });
+  text += `\n<i>Нажми номер чтобы открыть карточку</i>`;
+
+  // Кнопки-номера
+  const numRow = rows.map((f, i) => ({ text: String(offset + i + 1), callback_data: `friend_view:${f.id}` }));
+
+  // Навигация
+  const navRow = [];
+  if (offset > 0) navRow.push({ text: '⬅️', callback_data: `friends_pg:${Math.max(0, offset - FRIENDS_PAGE)}` });
+  navRow.push({ text: `${curPage}/${totalPages}`, callback_data: 'vp_noop' });
+  if (offset + FRIENDS_PAGE < total) navRow.push({ text: '➡️', callback_data: `friends_pg:${offset + FRIENDS_PAGE}` });
+
+  return tgApi('editMessageText', {
+    chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      numRow,
+      navRow,
+      [{ text: '🌐 На сайте', url: SITE_URL }, { text: '◀️ В профиль', callback_data: 'me_back' }],
+    ]},
+  });
+}
+
+async function showFriendCard(chatId, messageId, u, friendId) {
+  // Проверяем, что friendId реально в друзьях у u
+  const f = db.prepare(`
+    SELECT u.* FROM users u
+    JOIN friends fr ON ((fr.from_id=? AND fr.to_id=u.id) OR (fr.to_id=? AND fr.from_id=u.id))
+    WHERE u.id=? AND fr.status='accepted'
+  `).get(u.id, u.id, friendId);
+  if (!f) {
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: 'Не найден в твоих друзьях 🤷',
+      reply_markup: { inline_keyboard: [[{ text: '◀️ К списку', callback_data: 'friends' }]] },
+    });
+  }
+  const profilesCount = db.prepare('SELECT COUNT(*) c FROM profiles WHERE owner_id=? AND hidden=0').get(f.id).c;
+  const text =
+    `${f.emoji || '👤'} <b>${tgEsc(f.display_name || f.username)}</b>\n` +
+    `🆔 @${tgEsc(f.username)}\n` +
+    (f.status ? `💭 ${tgEsc(f.status)}\n` : '') +
+    (f.location ? `📍 ${tgEsc(f.location)}\n` : '') +
+    `📅 С нами с ${new Date(f.created_at).toLocaleDateString('ru-RU')}\n` +
+    (f.bio ? `\n📝 <i>${tgEsc(f.bio.slice(0, 300))}${f.bio.length>300?'…':''}</i>\n` : '') +
+    `\n📋 Анкет: <b>${profilesCount}</b>`;
+  return tgApi('editMessageText', {
+    chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: [
+      [{ text: '🌐 Открыть на сайте', url: SITE_URL }],
+      [{ text: '◀️ К списку друзей', callback_data: 'friends' }],
     ]},
   });
 }
@@ -888,25 +1178,47 @@ async function handleTgCallback(cb) {
     return tgApi('sendMessage', { chat_id: chatId, text: '🔒 Сначала привяжи аккаунт. Напиши /start' });
   }
 
-  if (data === 'me') return sendUserProfile(chatId, u);
+  if (data === 'me') return showMyProfile(chatId, messageId, u);
+  if (data === 'me_back') return showMyProfile(chatId, messageId, u);
   if (data === 'site_login') return doSiteLogin(chatId);
 
-  if (data === 'friends') {
-    const friendsCount = db.prepare("SELECT COUNT(*) c FROM friends WHERE (from_id=? OR to_id=?) AND status='accepted'").get(u.id, u.id).c;
-    const incoming = db.prepare("SELECT COUNT(*) c FROM friends WHERE to_id=? AND status='pending'").get(u.id).c;
-    const outgoing = db.prepare("SELECT COUNT(*) c FROM friends WHERE from_id=? AND status='pending'").get(u.id).c;
+  // ── Редактирование профиля сайта ──
+  if (data === 'edit_profile') return showEditMenu(chatId, messageId, u);
+  if (data.startsWith('edit_field:')) {
+    const field = data.split(':')[1];
+    return startEditField(chatId, messageId, u, field);
+  }
+  if (data === 'edit_avatar_remove') {
+    if (u.avatar) { try { removeFile(u.avatar); } catch {} }
+    db.prepare('UPDATE users SET avatar=NULL WHERE id=?').run(u.id);
     return tgApi('editMessageText', {
       chat_id: chatId, message_id: messageId,
-      text: `👥 <b>Друзья</b>\n\n` +
-            `✅ В друзьях: <b>${friendsCount}</b>\n` +
-            `📩 Входящих заявок: <b>${incoming}</b>\n` +
-            `📤 Исходящих: <b>${outgoing}</b>`,
-      parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [
-        [{ text: '🌐 Управлять на сайте', url: SITE_URL }],
-        [{ text: '◀️ В меню', callback_data: 'menu' }],
-      ]}
+      text: '✓ Аватарка удалена',
+      reply_markup: { inline_keyboard: [[{ text: '◀️ Назад', callback_data: 'edit_profile' }]] },
     });
+  }
+  if (data === 'edit_banner_remove') {
+    if (u.banner) { try { removeFile(u.banner); } catch {} }
+    db.prepare('UPDATE users SET banner=NULL WHERE id=?').run(u.id);
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId,
+      text: '✓ Баннер удалён',
+      reply_markup: { inline_keyboard: [[{ text: '◀️ Назад', callback_data: 'edit_profile' }]] },
+    });
+  }
+  if (data === 'edit_cancel') {
+    editStates.delete(chatId);
+    return showEditMenu(chatId, messageId, u);
+  }
+
+  if (data === 'friends') return showFriendsList(chatId, messageId, u, 0);
+  if (data.startsWith('friends_pg:')) {
+    const offset = parseInt(data.split(':')[1], 10) || 0;
+    return showFriendsList(chatId, messageId, u, offset);
+  }
+  if (data.startsWith('friend_view:')) {
+    const fid = parseInt(data.split(':')[1], 10) || 0;
+    return showFriendCard(chatId, messageId, u, fid);
   }
 
   if (data === 'chats') {
@@ -1259,6 +1571,58 @@ function audit(actor, action, target = '') {
     );
 }
 
+// ── MENTIONS ─────────────────────────────────────────────────────────
+// Извлекает уникальные @username из текста (3-20 латинских/цифровых/_)
+function parseMentions(text) {
+  if (!text) return [];
+  const re = /(?:^|[^A-Za-z0-9_])@([A-Za-z0-9_]{3,20})/g;
+  const set = new Set();
+  let m;
+  while ((m = re.exec(String(text)))) set.add(m[1].toLowerCase());
+  return [...set].slice(0, 10); // максимум 10 на сообщение
+}
+
+// Найти id-шники упомянутых юзеров (исключая автора и забаненных)
+function resolveMentionUserIds(usernames, excludeId = null) {
+  if (!usernames.length) return [];
+  const placeholders = usernames.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT id, username, display_name, tg_id, banned FROM users
+     WHERE LOWER(username) IN (${placeholders})`
+  ).all(...usernames);
+  return rows.filter(u => !u.banned && u.id !== excludeId);
+}
+
+// Уведомить упомянутых: socket toast + tg notify
+function notifyMentions({ text, fromUser, contextLabel, contextUrl }) {
+  const usernames = parseMentions(text);
+  if (!usernames.length) return;
+  const recipients = resolveMentionUserIds(usernames, fromUser?.id);
+  if (!recipients.length) return;
+  const fromName = fromUser ? (fromUser.display_name || fromUser.username) : '🥷 Аноним';
+  const fromHtml = tgEsc(fromName);
+  const ctxHtml = tgEsc(contextLabel || '');
+  const preview = String(text||'').slice(0, 200);
+  for (const r of recipients) {
+    // Сайт — через socket-event на персональную комнату user:N
+    try {
+      io.to('user:' + r.id).emit('mention:new', {
+        from: { id: fromUser?.id || null, displayName: fromName, username: fromUser?.username || null },
+        context: contextLabel || '',
+        url: contextUrl || null,
+        preview,
+        at: Date.now(),
+      });
+    } catch {}
+    // Telegram — если привязан
+    if (r.tg_id && TG_BOT_TOKEN) {
+      const link = contextUrl ? `\n\n🔗 ${contextUrl}` : `\n\n${SITE_URL}`;
+      const tgText = `🔔 <b>${fromHtml}</b> упомянул(а) тебя${ctxHtml ? ' в ' + ctxHtml : ''}:\n\n<i>${tgEsc(preview)}</i>${link}`;
+      try { tgApi('sendMessage', { chat_id: r.tg_id, text: tgText, parse_mode: 'HTML', disable_web_page_preview: true }); } catch {}
+    }
+  }
+}
+
 // Публичные имя/аватарка/эмодзи с учётом индивидуального anon_mode
 function resolveAuthor(u) { return (u.anon_mode && rank(u) >= 1) ? 'Анонимный администратор' : u.display_name; }
 function resolveAvatar(u) { return (u.anon_mode && rank(u) >= 1) ? null : (u.avatar || null); }
@@ -1608,6 +1972,15 @@ app.get('/api/users/:id/public', (req,res) => {
   res.json({ user:publicUser(u), profiles:profs.map(publicProfile), postsCount, commentsCount });
 });
 
+// Лёгкий лукап по username — нужен для упоминаний @user в bio/комментариях
+app.get('/api/users/by-username/:username', (req,res) => {
+  const username = String(req.params.username || '').toLowerCase();
+  if (!/^[a-z0-9_]{3,20}$/.test(username)) return res.status(400).json({error:'Неверный username'});
+  const u = db.prepare('SELECT id, username, display_name FROM users WHERE LOWER(username)=?').get(username);
+  if (!u) return res.status(404).json({error:'Не найден'});
+  res.json({ id: u.id, username: u.username, displayName: u.display_name });
+});
+
 app.post('/api/users/:id/role', requireAdmin, (req,res) => {
   const target = db.prepare('SELECT * FROM users WHERE id=?').get(+req.params.id);
   if (!target) return res.status(404).json({error:'Не найден'});
@@ -1720,6 +2093,7 @@ app.post('/api/profiles/anon', (req,res) => {
       for (const s of subs) tgApi('sendMessage', { chat_id: s.tg_id, text, parse_mode: 'HTML', disable_web_page_preview: true });
     } catch(e) { console.warn('TG notify new anon profile:', e.message); }
   }
+  if (p.bio) notifyMentions({ text: p.bio, fromUser: null, contextLabel: `описании анкеты «${p.name}»`, contextUrl: `${SITE_URL}/#profile-${p.id}` });
   res.json({ profile: publicProfile(p) });
 });
 
@@ -1744,6 +2118,7 @@ app.post('/api/profiles', requireAuth, (req,res) => {
       for (const s of subs) tgApi('sendMessage', { chat_id: s.tg_id, text, parse_mode: 'HTML', disable_web_page_preview: true });
     } catch(e) { console.warn('TG notify new profile:', e.message); }
   }
+  if (bio) notifyMentions({ text: bio, fromUser: req.user, contextLabel: `описании анкеты «${p.name}»`, contextUrl: `${SITE_URL}/#profile-${p.id}` });
   res.json({ profile: publicProfile(p) });
 });
 
@@ -1779,6 +2154,18 @@ app.patch('/api/profiles/:id', requireAuth, (req,res) => {
   const updated = db.prepare('SELECT * FROM profiles WHERE id=?').get(p.id);
   if (isMod && (pinned!=null||hidden!=null)) audit(req.user, 'profile_mod', `#${p.id}`);
   io.emit('profile:updated', publicProfile(updated));
+  // Если bio было изменено — проверяем упоминания (только новые, отсутствовавшие в старом bio)
+  if (bio != null && String(bio) !== String(p.bio||'')) {
+    const wasMentions = new Set(parseMentions(p.bio||''));
+    const newText = parseMentions(bio).filter(u => !wasMentions.has(u))
+      .map(u => '@' + u).join(' ');
+    if (newText) notifyMentions({
+      text: newText + ' ' + bio,
+      fromUser: req.user,
+      contextLabel: `описании анкеты «${updated.name}»`,
+      contextUrl: `${SITE_URL}/#profile-${updated.id}`,
+    });
+  }
   res.json({ profile: publicProfile(updated) });
 });
 
@@ -1875,6 +2262,7 @@ app.post('/api/profiles/:id/comments', requireAuth, (req,res) => {
   io.to('profile:'+p.id).emit('comment:new', publicComment(c));
   if (p.owner_id && p.owner_id !== req.user.id)
     tgNotify(p.owner_id, `💬 <b>${tgEsc(author)}</b> прокомментировал твою анкету <b>${tgEsc(p.name)}</b>:\n\n${tgEsc(String(text).slice(0,200))}\n\n${SITE_URL}`);
+  notifyMentions({ text, fromUser: req.user, contextLabel: `комментарии к анкете «${p.name}»`, contextUrl: `${SITE_URL}/#profile-${p.id}` });
   res.json({ comment: publicComment(c) });
 });
 
@@ -1896,6 +2284,7 @@ app.post('/api/profiles/:id/comments/image', requireAuth, (req,res) => {
     io.to('profile:'+p.id).emit('comment:new', publicComment(c));
     if (p.owner_id && p.owner_id !== req.user.id)
       tgNotify(p.owner_id, `🖼 <b>${tgEsc(author)}</b> отправил фото в комментарии к анкете <b>${tgEsc(p.name)}</b>${text?`:\n\n${tgEsc(text)}`:''}\n\n${SITE_URL}`);
+    if (text) notifyMentions({ text, fromUser: req.user, contextLabel: `комментарии к анкете «${p.name}»`, contextUrl: `${SITE_URL}/#profile-${p.id}` });
     res.json({ comment: publicComment(c) });
   });
 });
@@ -1983,6 +2372,7 @@ app.post('/api/topics/:id/posts', requireAuth, (req,res) => {
   io.emit('topic:posts_count', { topicId:t.id, count:cnt });
   if (t.user_id && t.user_id!==req.user.id)
     tgNotify(t.user_id, `✉️ *${tgEsc(author)}* ответил в теме *${tgEsc(t.title)}*:\n\n_${tgEsc(String(text).slice(0,200))}_\n\n🌐 [Открыть](${tgEsc(SITE_URL)})`);
+  notifyMentions({ text, fromUser: req.user, contextLabel: `теме «${t.title}»`, contextUrl: `${SITE_URL}/#topic-${t.id}` });
   res.json({ post: publicPost(post) });
 });
 
@@ -2004,6 +2394,7 @@ app.post('/api/topics/:id/posts/image', requireAuth, (req,res) => {
     io.to('topic:'+t.id).emit('post:new', publicPost(post));
     const cnt = db.prepare('SELECT COUNT(*) c FROM posts WHERE topic_id=?').get(t.id).c;
     io.emit('topic:posts_count', { topicId:t.id, count:cnt });
+    if (text) notifyMentions({ text, fromUser: req.user, contextLabel: `теме «${t.title}»`, contextUrl: `${SITE_URL}/#topic-${t.id}` });
     res.json({ post: publicPost(post) });
   });
 });

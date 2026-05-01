@@ -310,6 +310,8 @@ input,textarea,select{font-family:var(--font);outline:none}
 .uprofile-stat-n{font-size:18px;font-weight:700;color:var(--white)}
 .uprofile-stat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 .author-link{cursor:pointer;font-weight:700;color:var(--white);transition:color .12s}
+.mention{cursor:pointer;color:var(--accent);font-weight:600;text-decoration:none;border-bottom:1px dotted transparent;transition:border-color .12s}
+.mention:hover{border-bottom-color:var(--accent)}
 .author-link:hover{color:var(--accent)}
 .avatar-upload-wrap{position:relative;display:inline-block;cursor:pointer}
 .avatar-upload-wrap:hover .avatar-overlay{opacity:1}
@@ -790,6 +792,25 @@ async function api(path, opts = {}) {
 //  UTILS
 // ════════════════════════════════════════════════════════════════════
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Превращает @username в кликабельные ссылки. Принимает уже эскейпнутый HTML.
+function linkifyMentions(html) {
+  if (!html) return html;
+  // Совпадает с серверной регуляркой parseMentions
+  return String(html).replace(/(^|[^A-Za-z0-9_@])@([A-Za-z0-9_]{3,20})/g,
+    (_m, pre, name) => `${pre}<a class="mention" onclick="event.stopPropagation();openUserByUsername('${name.replace(/'/g,"\\'")}')">@${name}</a>`);
+}
+
+// Открыть профиль пользователя по @username (для упоминаний)
+async function openUserByUsername(username) {
+  if (!username) return;
+  try {
+    const u = await api(`/users/by-username/${encodeURIComponent(username)}`);
+    if (u && u.id) return openUserProfile(u.id);
+  } catch (e) {
+    toast(`Пользователь @${username} не найден`, 'err');
+  }
+}
 function timeAgo(ts) {
   const s = Math.floor((Date.now() - ts) / 1000);
   if (s < 60) return 'только что';
@@ -1325,7 +1346,7 @@ function renderProfileModal() {
       ${cmAvHtml}
       <div class="cm-bubble">
         <div class="cm-head">${nameHtml}<span class="cm-time">${timeAgo(c.createdAt)}</span></div>
-        ${c.text?`<div class="cm-text">${esc(c.text)}</div>`:''}
+        ${c.text?`<div class="cm-text">${linkifyMentions(esc(c.text))}</div>`:''}
         ${c.image?`<img src="${esc(c.image)}" class="cm-image" onclick="openLightbox('${esc(c.image)}')" loading="lazy">`:''}
         <div class="cm-actions">
           ${canDel?`<button class="cm-act red" onclick="deleteComment(${c.id})">Удалить</button>`:''}
@@ -1372,7 +1393,7 @@ function renderProfileModal() {
       </div>
     </div>
     <div class="section-title">📝 О себе</div>
-    <div class="about-box">${esc(p.bio||'Нет описания')}</div>
+    <div class="about-box">${linkifyMentions(esc(p.bio||'Нет описания'))}</div>
     ${photoGrid}
     <div class="section-title">💬 Комментарии (${(curProfile.comments||[]).length})</div>
     ${comments}
@@ -1684,7 +1705,7 @@ function renderTopicModal() {
         </div>
         <div class="tp-body">
           <div class="tp-meta">${timeAgo(p.createdAt)}</div>
-          ${p.text?`<div class="tp-content">${esc(p.text)}</div>`:''}
+          ${p.text?`<div class="tp-content">${linkifyMentions(esc(p.text))}</div>`:''}
           ${p.image?`<img src="${esc(p.image)}" class="post-image" onclick="openLightbox('${esc(p.image)}')" loading="lazy">`:''}
         </div>
       </div>
@@ -1944,7 +1965,7 @@ function renderUserProfile() {
         <div class="uprofile-meta-item">📅 на сайте с ${new Date(u.createdAt).toLocaleDateString('ru-RU')}</div>
         <div class="uprofile-meta-item">🕐 был ${timeAgo(u.lastSeen)}</div>
       </div>
-      ${u.bio?`<div class="uprofile-bio">${esc(u.bio)}</div>`:''}
+      ${u.bio?`<div class="uprofile-bio">${linkifyMentions(esc(u.bio))}</div>`:''}
       ${socialLinks?`<div class="uprofile-socials">${socialLinks}</div>`:''}
     </div>
     <div style="padding:0 20px 14px">
@@ -3035,6 +3056,11 @@ function initFriendSockets() {
   if (!socket) return;
   socket.on('report:new', () => {
     if (isMod()) toast('⚠️ Новая жалоба в админке', 'warn');
+  });
+  socket.on('mention:new', ({ from, context, url, preview }) => {
+    const who = from?.displayName || 'Кто-то';
+    const where = context ? ` в ${context}` : '';
+    toast(`🔔 ${who} упомянул тебя${where}`, 'ok');
   });
   socket.on('mod:warning', ({ reason, message }) => {
     toast(`⚠️ Предупреждение модератора: ${reason}`, 'err');
