@@ -2513,6 +2513,7 @@ async function renderAdmin() {
     ['topics', '💬 Темы'],
     ['reports', '⚠️ Жалобы'],
   ];
+  if (isAdmin()) tabs.push(['storage', '💾 Хранилище']);
   if (isAdmin()) tabs.push(['audit', '📜 Лог']);
   if (isAdmin()) tabs.push(['danger', '⚠ Опасные']);
 
@@ -2531,6 +2532,7 @@ async function renderAdmin() {
   else if (adminTab === 'topics') renderAdminTopics();
   else if (adminTab === 'reports') renderAdminReports();
   else if (adminTab === 'audit') renderAdminAudit();
+  else if (adminTab === 'storage') renderAdminStorage();
   else if (adminTab === 'danger') renderAdminDanger();
 }
 
@@ -2717,6 +2719,99 @@ function renderAdminDanger() {
       <button class="btn btn-danger btn-sm" onclick="purgeAllProfiles()" style="margin-right:8px">Удалить все анкеты</button>
       <button class="btn btn-danger btn-sm" onclick="purgeAllTopics()">Удалить все темы</button>
     </div>`;
+}
+
+// ── ХРАНИЛИЩЕ ─────────────────────────────────────────────────────
+function _fmtBytes(b) {
+  if (b == null) return '—';
+  if (b < 1024) return b + ' Б';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' КБ';
+  if (b < 1024*1024*1024) return (b/(1024*1024)).toFixed(1) + ' МБ';
+  return (b/(1024*1024*1024)).toFixed(2) + ' ГБ';
+}
+
+const _STORAGE_LABELS = {
+  avatars:  { icon: '🖼', label: 'Аватарки пользователей' },
+  profiles: { icon: '📋', label: 'Фото анкет' },
+  comments: { icon: '💬', label: 'Фото в комментариях' },
+  posts:    { icon: '✉️', label: 'Фото в постах форума' },
+  videos:   { icon: '🎬', label: 'Видео (анкет, комментов, постов)' },
+};
+
+async function renderAdminStorage() {
+  const body = document.getElementById('adminTabBody');
+  body.innerHTML = '<div class="empty-state">⏳ Считаю размер... (может занять несколько секунд)</div>';
+  try {
+    const s = await api('/admin/storage');
+    const entries = Object.entries(s.breakdown);
+    // Сортируем по размеру убыванию
+    entries.sort((a,b) => b[1].bytes - a[1].bytes);
+    const totalKnown = s.knownBytes || 1; // защита от деления на 0
+
+    // Прогресс по volume если есть данные
+    let volBar = '';
+    if (s.diskTotal && s.diskFree != null) {
+      const used = s.diskTotal - s.diskFree;
+      const pct = Math.min(100, (used / s.diskTotal) * 100);
+      const color = pct > 90 ? 'var(--red)' : pct > 70 ? 'var(--accent)' : 'var(--accent2)';
+      volBar = `
+        <div style="background:var(--card2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-weight:700;font-size:13px;color:var(--white)">💽 Volume / диск</div>
+            <div style="font-size:12px;color:var(--muted)">${_fmtBytes(used)} из ${_fmtBytes(s.diskTotal)} (${pct.toFixed(1)}%)</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:100px;height:10px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${color};transition:width .4s"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">Свободно: <b>${_fmtBytes(s.diskFree)}</b></div>
+        </div>`;
+    }
+
+    // Прогресс-бар по самим uploads
+    const totalPct = s.diskTotal ? Math.min(100, (s.totalBytes / s.diskTotal) * 100) : null;
+
+    const rows = entries.map(([key, info]) => {
+      const meta = _STORAGE_LABELS[key] || { icon: '📁', label: key };
+      const pct = (info.bytes / totalKnown) * 100;
+      const barColor = key === 'videos' ? 'var(--accent)' : 'var(--accent2)';
+      return `
+        <div style="background:var(--card2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
+              <span style="font-size:18px">${meta.icon}</span>
+              <div style="min-width:0">
+                <div style="font-weight:600;font-size:13px;color:var(--white)">${esc(meta.label)}</div>
+                <div style="font-size:11px;color:var(--muted)">${info.files} файлов · <code style="font-size:10px;color:var(--muted)">${esc(info.path)}</code></div>
+              </div>
+            </div>
+            <div style="font-weight:700;font-size:13px;color:var(--white);white-space:nowrap">${_fmtBytes(info.bytes)}</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:100px;height:6px;overflow:hidden">
+            <div style="width:${pct.toFixed(1)}%;height:100%;background:${barColor};transition:width .4s"></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    body.innerHTML = `
+      ${volBar}
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Всего в /uploads</div>
+          <div style="font-size:24px;font-weight:800;color:var(--white)">${_fmtBytes(s.totalBytes)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${s.totalFiles} файлов · путь <code>${esc(s.uploadsDir)}</code></div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="renderAdminStorage()" style="white-space:nowrap">🔄 Обновить</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin:8px 4px 6px">По папкам:</div>
+      ${rows}
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;padding:10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)">
+        💡 Данные кэшируются на 30 секунд. ${s.cached ? '<span style="color:var(--accent)">Показан кэш.</span>' : ''}
+        ${s.diskTotal && totalPct != null && totalPct > 80 ? '<br>⚠️ <b>Диск заполнен более чем на 80%.</b> Стоит почистить старое или расширить volume на Railway.' : ''}
+      </div>
+    `;
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state">Ошибка: ${esc(e.message)}</div>`;
+  }
 }
 function purgeAllProfiles() {
   confirm2('Удалить ВСЕ анкеты?', 'Все анкеты и комментарии будут удалены навсегда.', '⚠️', async () => {

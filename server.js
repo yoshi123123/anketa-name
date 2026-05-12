@@ -2762,6 +2762,66 @@ app.get('/api/audit', requireAdmin, (req,res) => {
   res.json({ log: rows });
 });
 
+// ── STORAGE USAGE (для админки) ──────────────────────────────────────
+function dirSizeSync(dirPath) {
+  let total = 0, files = 0;
+  try {
+    const list = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const ent of list) {
+      const full = path.join(dirPath, ent.name);
+      try {
+        if (ent.isDirectory()) {
+          const sub = dirSizeSync(full);
+          total += sub.bytes; files += sub.files;
+        } else if (ent.isFile()) {
+          total += fs.statSync(full).size;
+          files++;
+        }
+      } catch {}
+    }
+  } catch {}
+  return { bytes: total, files };
+}
+
+let _storageCache = { at: 0, data: null };
+app.get('/api/admin/storage', requireAdmin, (req,res) => {
+  const now = Date.now();
+  // Кэш на 30 секунд — диск дёргать дорого
+  if (_storageCache.data && (now - _storageCache.at) < 30_000) {
+    return res.json({ ...(_storageCache.data), cached: true });
+  }
+  const breakdown = {};
+  let totalBytes = 0, totalFiles = 0;
+  for (const [key, dir] of Object.entries(DIRS)) {
+    const { bytes, files } = dirSizeSync(dir);
+    breakdown[key] = { bytes, files, path: dir };
+    totalBytes += bytes; totalFiles += files;
+  }
+  // Также общий размер всего UPLOADS_DIR (на случай если там ещё что-то есть)
+  const upRoot = dirSizeSync(UPLOADS_DIR);
+  // Свободное место — пробуем достать через statfs если есть (Node 18.15+)
+  let diskFree = null, diskTotal = null;
+  try {
+    const stat = fs.statfsSync ? fs.statfsSync(UPLOADS_DIR) : null;
+    if (stat) {
+      diskFree  = stat.bavail * stat.bsize;
+      diskTotal = stat.blocks * stat.bsize;
+    }
+  } catch {}
+  const data = {
+    breakdown,
+    totalBytes: upRoot.bytes,
+    totalFiles: upRoot.files,
+    knownBytes: totalBytes,
+    knownFiles: totalFiles,
+    uploadsDir: UPLOADS_DIR,
+    diskFree, diskTotal,
+    at: now,
+  };
+  _storageCache = { at: now, data };
+  res.json({ ...data, cached: false });
+});
+
 // ── STATIC ─────────────────────────────────────────────────────────
 // ── REPORTS / ЖАЛОБЫ ────────────────────────────────────────────────
 const REPORT_REASONS = ['spam','offensive','forbidden','fraud','other'];
