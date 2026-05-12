@@ -691,6 +691,8 @@ async function viewOneProfile(chatId, messageId, profileId) {
   try { tags = JSON.parse(p.tags || '[]'); } catch {}
   let photos = [];
   try { photos = JSON.parse(p.photos || '[]'); } catch {}
+  let videos = [];
+  try { videos = JSON.parse(p.videos || '[]'); } catch {}
   // Включаем аватарку как первое фото если её нет в массиве photos
   if (p.avatar && !photos.includes(p.avatar)) photos = [p.avatar, ...photos];
   const date = new Date(p.created_at).toLocaleDateString('ru-RU');
@@ -716,37 +718,54 @@ async function viewOneProfile(chatId, messageId, profileId) {
     { text: '◀️ К списку', callback_data: `vp:${vs.offset || 0}` },
   ]);
 
-  // Если есть фото — отправляем их и текст отдельно
-  if (photos.length) {
-    // Удаляем сообщение со списком, чтобы не было нагромождения
-    try { await tgApi('deleteMessage', { chat_id: chatId, message_id: messageId }); } catch {}
-    const urls = photos.slice(0, 10).map(rel => SITE_URL.replace(/\/$/, '') + rel);
-    const captionPart = (baseText.length > 1000 ? baseText.slice(0, 1000) + '…' : baseText);
-    if (urls.length === 1) {
-      // Одно фото — sendPhoto с caption и кнопками
+  const base = SITE_URL.replace(/\/$/, '');
+  // Собираем единый медиа-список: сначала фото, потом видео (фото идёт первым кадром)
+  const media = [
+    ...photos.slice(0, 8).map(rel => ({ type: 'photo', url: base + rel })),
+    ...videos.slice(0, 3).map(rel => ({ type: 'video', url: base + rel })),
+  ].slice(0, 10); // Telegram media group лимит — 10 элементов
+
+  if (media.length === 0) {
+    // Совсем без медиа — обычное editMessageText
+    return tgApi('editMessageText', {
+      chat_id: chatId, message_id: messageId, text: baseText, parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: keyboard },
+    });
+  }
+
+  // Удаляем сообщение со списком, чтобы не было нагромождения
+  try { await tgApi('deleteMessage', { chat_id: chatId, message_id: messageId }); } catch {}
+  const captionPart = (baseText.length > 1000 ? baseText.slice(0, 1000) + '…' : baseText);
+
+  if (media.length === 1) {
+    const m = media[0];
+    if (m.type === 'photo') {
       await tgApi('sendPhoto', {
-        chat_id: chatId, photo: urls[0],
+        chat_id: chatId, photo: m.url,
         caption: captionPart, parse_mode: 'HTML',
         reply_markup: { inline_keyboard: keyboard },
       });
     } else {
-      // Несколько — sendMediaGroup (без кнопок) + сообщение с текстом и кнопками
-      const media = urls.map((u, i) => ({
-        type: 'photo', media: u,
-        ...(i === 0 ? { caption: captionPart, parse_mode: 'HTML' } : {}),
-      }));
-      await tgApi('sendMediaGroup', { chat_id: chatId, media });
-      await tgApi('sendMessage', {
-        chat_id: chatId, text: '👆 Анкета · действия:',
+      await tgApi('sendVideo', {
+        chat_id: chatId, video: m.url,
+        caption: captionPart, parse_mode: 'HTML',
+        supports_streaming: true,
         reply_markup: { inline_keyboard: keyboard },
       });
     }
     return;
   }
 
-  // Без фото — обычное editMessageText
-  return tgApi('editMessageText', {
-    chat_id: chatId, message_id: messageId, text: baseText, parse_mode: 'HTML',
+  // Несколько — sendMediaGroup (с mixed photo+video) + отдельное сообщение с кнопками
+  const group = media.map((m, i) => ({
+    type: m.type,
+    media: m.url,
+    ...(i === 0 ? { caption: captionPart, parse_mode: 'HTML' } : {}),
+    ...(m.type === 'video' ? { supports_streaming: true } : {}),
+  }));
+  await tgApi('sendMediaGroup', { chat_id: chatId, media: group });
+  await tgApi('sendMessage', {
+    chat_id: chatId, text: '👆 Анкета · действия:',
     reply_markup: { inline_keyboard: keyboard },
   });
 }
@@ -1302,6 +1321,7 @@ const DIRS = {
   profiles: path.join(UPLOADS_DIR, 'profiles'),
   comments: path.join(UPLOADS_DIR, 'comments'),
   posts:    path.join(UPLOADS_DIR, 'posts'),
+  videos:   path.join(UPLOADS_DIR, 'videos'),
 };
 for (const d of Object.values(DIRS)) fs.mkdirSync(d, { recursive: true });
 
@@ -1493,13 +1513,16 @@ addCol('users', 'tg_login_code', 'TEXT DEFAULT NULL');
 addCol('users', 'tg_login_code_expires', 'INTEGER DEFAULT NULL');
 addCol('profiles', 'avatar',     'TEXT DEFAULT NULL');
 addCol('profiles', 'photos',     "TEXT DEFAULT '[]'");
+addCol('profiles', 'videos',     "TEXT DEFAULT '[]'");
 addCol('profiles', 'anon',       'INTEGER NOT NULL DEFAULT 0');
 addCol('profiles', 'show_in_profile', 'INTEGER NOT NULL DEFAULT 1');
 addCol('comments', 'image',      'TEXT DEFAULT NULL');
+addCol('comments', 'video',      'TEXT DEFAULT NULL');
 addCol('comments', 'user_avatar','TEXT DEFAULT NULL');
 addCol('comments', 'user_emoji', 'TEXT DEFAULT NULL');
 addCol('comments', 'is_anon_mode','INTEGER NOT NULL DEFAULT 0');
 addCol('posts',    'image',      'TEXT DEFAULT NULL');
+addCol('posts',    'video',      'TEXT DEFAULT NULL');
 addCol('posts',    'user_avatar','TEXT DEFAULT NULL');
 addCol('posts',    'user_emoji', 'TEXT DEFAULT NULL');
 addCol('posts',    'is_anon_mode','INTEGER NOT NULL DEFAULT 0');
@@ -1650,6 +1673,7 @@ function publicProfile(p) {
     authorName:    isAnon ? null : null, // заполняется ниже через JOIN если нужно
     name: p.name, age: p.age, emoji: p.emoji, color: p.color, bio: p.bio,
     tags: safeJSON(p.tags, []), avatar: p.avatar || null, photos: safeJSON(p.photos, []),
+    videos: safeJSON(p.videos, []),
     anon: isAnon, showInProfile: !!p.show_in_profile,
     pinned: !!p.pinned, hidden: !!p.hidden, createdAt: p.created_at,
   };
@@ -1667,7 +1691,7 @@ function publicComment(c) {
     id: c.id, profileId: c.profile_id,
     userId:     anon ? null : c.user_id,
     author:     c.author,
-    text:       c.text, image: c.image || null,
+    text:       c.text, image: c.image || null, video: c.video || null,
     userAvatar: anon ? null : (c.user_avatar || null),
     userEmoji:  anon ? '🛡️' : (c.user_emoji || '👤'),
     isAnonMode: anon,
@@ -1681,7 +1705,7 @@ function publicPost(p) {
     id: p.id, topicId: p.topic_id,
     userId:     anon ? null : p.user_id,
     author:     p.author,
-    text:       p.text, image: p.image || null,
+    text:       p.text, image: p.image || null, video: p.video || null,
     userAvatar: anon ? null : (p.user_avatar || null),
     userEmoji:  anon ? '🛡️' : (p.user_emoji || '👤'),
     isAnonMode: anon,
@@ -1716,6 +1740,24 @@ const uploadBanner  = makeUpload('avatars',  8);
 const uploadProfile = makeUpload('profiles', 8);
 const uploadComment = makeUpload('comments', 8);
 const uploadPost    = makeUpload('posts',    8);
+
+// Видео — отдельная фабрика, общий destination DIRS.videos
+function makeVideoUpload(maxMB) {
+  return multer({
+    storage: multer.diskStorage({
+      destination: DIRS.videos,
+      filename:    (_, f, cb) => cb(null, Date.now() + '_' + Math.random().toString(36).slice(2) + (path.extname(f.originalname).toLowerCase() || '.mp4')),
+    }),
+    limits:     { fileSize: maxMB * 1024 * 1024 },
+    fileFilter: (_, f, cb) => {
+      // принимаем основные форматы; некоторые мобилки шлют .mov как application/octet-stream
+      const ok = /^video\/(mp4|webm|ogg|quicktime|x-matroska)$/.test(f.mimetype)
+              || /\.(mp4|webm|ogv|mov|mkv|m4v)$/i.test(f.originalname);
+      cb(ok ? null : new Error('Только видео: mp4, webm, mov, mkv'), ok);
+    },
+  });
+}
+const uploadVideo = makeVideoUpload(50); // до 50 МБ
 
 async function tryCompress(fp, maxW) {
   try {
@@ -2218,6 +2260,38 @@ app.delete('/api/profiles/:id/photos', requireAuth, (req,res) => {
   res.json({ profile: publicProfile(up) });
 });
 
+// ── ВИДЕО для анкет (до 3 шт., 50 МБ каждое) ──
+app.post('/api/profiles/:id/videos', requireAuth, (req,res) => {
+  const p = db.prepare('SELECT * FROM profiles WHERE id=?').get(+req.params.id);
+  if (!p) return res.status(404).json({error:'Не найдено'});
+  if (p.owner_id!==req.user.id && rank(req.user)<1) return res.status(403).json({error:'Нет прав'});
+  const videos = safeJSON(p.videos, []);
+  if (videos.length >= 3) return res.status(400).json({error:'Максимум 3 видео'});
+  uploadVideo.single('video')(req, res, err => {
+    if (err) return res.status(400).json({error:err.message});
+    if (!req.file) return res.status(400).json({error:'Файл не получен'});
+    const rel = '/uploads/videos/' + req.file.filename;
+    videos.push(rel);
+    db.prepare('UPDATE profiles SET videos=? WHERE id=?').run(JSON.stringify(videos), p.id);
+    const up = db.prepare('SELECT * FROM profiles WHERE id=?').get(p.id);
+    io.emit('profile:updated', publicProfile(up));
+    res.json({ profile: publicProfile(up) });
+  });
+});
+
+app.delete('/api/profiles/:id/videos', requireAuth, (req,res) => {
+  const p = db.prepare('SELECT * FROM profiles WHERE id=?').get(+req.params.id);
+  if (!p) return res.status(404).json({error:'Не найдено'});
+  if (p.owner_id!==req.user.id && rank(req.user)<1) return res.status(403).json({error:'Нет прав'});
+  const { url } = req.body||{};
+  let videos = safeJSON(p.videos, []);
+  if (videos.includes(url)) { removeFile(url); videos = videos.filter(x=>x!==url); }
+  db.prepare('UPDATE profiles SET videos=? WHERE id=?').run(JSON.stringify(videos), p.id);
+  const up = db.prepare('SELECT * FROM profiles WHERE id=?').get(p.id);
+  io.emit('profile:updated', publicProfile(up));
+  res.json({ profile: publicProfile(up) });
+});
+
 app.post('/api/profiles/:id/clone', requireMod, (req,res) => {
   const p = db.prepare('SELECT * FROM profiles WHERE id=?').get(+req.params.id);
   if (!p) return res.status(404).json({error:'Не найдено'});
@@ -2236,6 +2310,7 @@ app.delete('/api/profiles/:id', requireAuth, (req,res) => {
   if (p.owner_id!==req.user.id && rank(req.user)<1) return res.status(403).json({error:'Нет прав'});
   if (p.avatar) removeFile(p.avatar);
   for (const ph of safeJSON(p.photos,[])) removeFile(ph);
+  for (const v of safeJSON(p.videos,[])) removeFile(v);
   db.prepare('DELETE FROM profiles WHERE id=?').run(p.id);
   audit(req.user, 'delete_profile', `#${p.id} ${p.name}`);
   io.emit('profile:deleted', { id: p.id });
@@ -2289,11 +2364,35 @@ app.post('/api/profiles/:id/comments/image', requireAuth, (req,res) => {
   });
 });
 
+// Видео в комментарии
+app.post('/api/profiles/:id/comments/video', requireAuth, (req,res) => {
+  const p = db.prepare('SELECT * FROM profiles WHERE id=?').get(+req.params.id);
+  if (!p) return res.status(404).json({error:'Анкета не найдена'});
+  uploadVideo.single('video')(req, res, err => {
+    if (err) return res.status(400).json({error:err.message});
+    if (!req.file) return res.status(400).json({error:'Файл не получен'});
+    const rel = '/uploads/videos/' + req.file.filename;
+    const isAnon = !!req.user.anon_mode && rank(req.user) >= 1;
+    const author = resolveAuthor(req.user), avatar = resolveAvatar(req.user), emoji = resolveEmoji(req.user);
+    const text   = (req.body?.text||'').slice(0,500);
+    const info   = db.prepare(`INSERT INTO comments(profile_id,user_id,author,text,video,user_avatar,user_emoji,is_anon_mode,created_at)
+                               VALUES(?,?,?,?,?,?,?,?,?)`)
+      .run(p.id, req.user.id, author, text, rel, avatar, emoji, isAnon?1:0, Date.now());
+    const c = db.prepare('SELECT * FROM comments WHERE id=?').get(info.lastInsertRowid);
+    io.to('profile:'+p.id).emit('comment:new', publicComment(c));
+    if (p.owner_id && p.owner_id !== req.user.id)
+      tgNotify(p.owner_id, `🎬 <b>${tgEsc(author)}</b> отправил видео в комментарии к анкете <b>${tgEsc(p.name)}</b>${text?`:\n\n${tgEsc(text)}`:''}\n\n${SITE_URL}`);
+    if (text) notifyMentions({ text, fromUser: req.user, contextLabel: `комментарии к анкете «${p.name}»`, contextUrl: `${SITE_URL}/#profile-${p.id}` });
+    res.json({ comment: publicComment(c) });
+  });
+});
+
 app.delete('/api/comments/:id', requireAuth, (req,res) => {
   const c = db.prepare('SELECT * FROM comments WHERE id=?').get(+req.params.id);
   if (!c) return res.status(404).json({error:'Не найден'});
   if (c.user_id!==req.user.id && rank(req.user)<1) return res.status(403).json({error:'Нет прав'});
   if (c.image) removeFile(c.image);
+  if (c.video) removeFile(c.video);
   db.prepare('DELETE FROM comments WHERE id=?').run(c.id);
   io.to('profile:'+c.profile_id).emit('comment:deleted', { id: c.id });
   res.json({ok:true});
@@ -2399,11 +2498,35 @@ app.post('/api/topics/:id/posts/image', requireAuth, (req,res) => {
   });
 });
 
+// Видео в посте форума
+app.post('/api/topics/:id/posts/video', requireAuth, (req,res) => {
+  const t = db.prepare('SELECT * FROM topics WHERE id=?').get(+req.params.id);
+  if (!t) return res.status(404).json({error:'Тема не найдена'});
+  uploadVideo.single('video')(req, res, err => {
+    if (err) return res.status(400).json({error:err.message});
+    if (!req.file) return res.status(400).json({error:'Файл не получен'});
+    const rel  = '/uploads/videos/' + req.file.filename;
+    const isAnon = !!req.user.anon_mode && rank(req.user) >= 1;
+    const author = resolveAuthor(req.user), avatar = resolveAvatar(req.user), emoji = resolveEmoji(req.user);
+    const text   = (req.body?.text||'').slice(0,1000);
+    const info   = db.prepare(`INSERT INTO posts(topic_id,user_id,author,text,video,user_avatar,user_emoji,is_anon_mode,created_at)
+                               VALUES(?,?,?,?,?,?,?,?,?)`)
+      .run(t.id, req.user.id, author, text, rel, avatar, emoji, isAnon?1:0, Date.now());
+    const post = db.prepare('SELECT * FROM posts WHERE id=?').get(info.lastInsertRowid);
+    io.to('topic:'+t.id).emit('post:new', publicPost(post));
+    const cnt = db.prepare('SELECT COUNT(*) c FROM posts WHERE topic_id=?').get(t.id).c;
+    io.emit('topic:posts_count', { topicId:t.id, count:cnt });
+    if (text) notifyMentions({ text, fromUser: req.user, contextLabel: `теме «${t.title}»`, contextUrl: `${SITE_URL}/#topic-${t.id}` });
+    res.json({ post: publicPost(post) });
+  });
+});
+
 app.delete('/api/posts/:id', requireAuth, (req,res) => {
   const p = db.prepare('SELECT * FROM posts WHERE id=?').get(+req.params.id);
   if (!p) return res.status(404).json({error:'Не найден'});
   if (p.user_id!==req.user.id && rank(req.user)<1) return res.status(403).json({error:'Нет прав'});
   if (p.image) removeFile(p.image);
+  if (p.video) removeFile(p.video);
   db.prepare('DELETE FROM posts WHERE id=?').run(p.id);
   io.to('topic:'+p.topic_id).emit('post:deleted', { id: p.id });
   res.json({ok:true});

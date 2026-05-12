@@ -439,7 +439,16 @@ input,textarea,select{font-family:var(--font);outline:none}
   display:flex;align-items:center;justify-content:center;cursor:zoom-out}
 .photo-lightbox img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:var(--r)}
 .cm-image{max-width:260px;max-height:240px;border-radius:var(--r);margin-top:6px;cursor:zoom-in;display:block}
+.cm-video{max-width:320px;max-height:280px;border-radius:var(--r);margin-top:6px;display:block;background:#000}
 .post-image{max-width:420px;max-height:360px;border-radius:var(--r);margin-top:8px;cursor:zoom-in;display:block}
+.post-video{max-width:520px;max-height:400px;border-radius:var(--r);margin-top:8px;display:block;background:#000}
+.profile-video{width:100%;max-height:300px;border-radius:var(--r2);background:#000;display:block}
+.video-item{position:relative;border-radius:var(--r2);overflow:hidden;background:var(--card2);border:1px solid var(--border)}
+.video-item .photo-del{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.75);color:#fff;border:none;cursor:pointer;font-size:13px;z-index:2}
+.video-add-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:var(--bg3);border:2px dashed var(--border);border-radius:var(--r2);padding:18px;cursor:pointer;color:var(--muted);font-size:12px;transition:all .15s;min-height:120px}
+.video-add-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--card2)}
+.video-add-btn .ico{font-size:24px}
+.video-upload-progress{position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;border-radius:var(--r2);z-index:3}
 .img-attach-preview{position:relative;display:inline-block;margin-top:6px}
 .img-attach-preview img{height:60px;border-radius:var(--r);border:1px solid var(--border)}
 .img-attach-preview .rm{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
@@ -1450,6 +1459,22 @@ function renderProfileModal() {
         </button>` : ''}
     </div>` : '';
 
+  // Галерея видео
+  const videos = p.videos || [];
+  const videoGrid = (videos.length || canEdit) ? `
+    <div class="section-title">🎬 Видео (${videos.length}/3)</div>
+    <div class="photo-grid">
+      ${videos.map(url=>`
+        <div class="video-item">
+          <video class="profile-video" src="${esc(url)}" controls preload="metadata" playsinline></video>
+          ${canEdit?`<button class="photo-del" onclick="deleteProfileVideo(${p.id},'${esc(url)}')" title="Удалить">✕</button>`:''}
+        </div>`).join('')}
+      ${canEdit && videos.length<3 ? `
+        <button class="video-add-btn" onclick="uploadProfileVideo(${p.id})">
+          <span class="ico">🎬</span><span>Добавить видео</span><span style="font-size:10px;color:var(--muted)">до 50 МБ</span>
+        </button>` : ''}
+    </div>` : '';
+
   // Комментарии
   const comments = (curProfile.comments || []).map(c => {
     const canDel = curUser && (c.userId === curUser.id || isMod());
@@ -1470,6 +1495,7 @@ function renderProfileModal() {
         <div class="cm-head">${nameHtml}<span class="cm-time">${timeAgo(c.createdAt)}</span></div>
         ${c.text?`<div class="cm-text">${linkifyMentions(esc(c.text))}</div>`:''}
         ${c.image?`<img src="${esc(c.image)}" class="cm-image" onclick="openLightbox('${esc(c.image)}')" loading="lazy">`:''}
+        ${c.video?`<video src="${esc(c.video)}" class="cm-video" controls preload="metadata" playsinline></video>`:''}
         <div class="cm-actions">
           ${canDel?`<button class="cm-act red" onclick="deleteComment(${c.id})">Удалить</button>`:''}
           ${curUser && c.userId !== curUser.id && !isAnon ? `<button class="cm-act" style="color:var(--muted)" onclick="openReport('comment',${c.id},'комментарий от ${esc(c.author)}')">⚠️</button>` : ''}
@@ -1490,7 +1516,9 @@ function renderProfileModal() {
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           <button class="img-btn" onclick="pickCommentImage()" title="Прикрепить фото">📎 Фото</button>
+          <button class="img-btn" onclick="pickCommentVideo()" title="Прикрепить видео">🎬 Видео</button>
           <input type="file" id="cmImageInput" accept="image/*" style="display:none" onchange="previewCommentImage(this)">
+          <input type="file" id="cmVideoInput" accept="video/*" style="display:none" onchange="previewCommentVideo(this)">
         </div>
       </div>
       <button class="comment-send" onclick="sendComment()">→</button>
@@ -1517,6 +1545,7 @@ function renderProfileModal() {
     <div class="section-title">📝 О себе</div>
     <div class="about-box">${linkifyMentions(esc(p.bio||'Нет описания'))}</div>
     ${photoGrid}
+    ${videoGrid}
     <div class="section-title">💬 Комментарии (${(curProfile.comments||[]).length})</div>
     ${comments}
     ${commentInput}`;
@@ -1576,16 +1605,72 @@ async function deleteProfilePhoto(profileId, url) {
   } catch(e) { toast(e.message, 'err'); }
 }
 
+function uploadProfileVideo(profileId) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'video/*';
+  inp.onchange = async () => {
+    const file = inp.files[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) { toast('Видео больше 50 МБ', 'err'); return; }
+    const fd = new FormData();
+    fd.append('video', file);
+    toast('⬆ Загружаю видео...', '');
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/videos`, { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const idx = profiles.findIndex(x=>x.id===profileId);
+      if (idx>=0) profiles[idx] = data.profile;
+      if (curProfile?.profile.id===profileId) { curProfile.profile=data.profile; renderProfileModal(); }
+      toast('🎬 Видео добавлено', 'ok');
+    } catch(e) { toast(e.message, 'err'); }
+  };
+  inp.click();
+}
+
+async function deleteProfileVideo(profileId, url) {
+  if (!confirm('Удалить это видео?')) return;
+  try {
+    const res = await fetch(`/api/profiles/${profileId}/videos`, { method:'DELETE', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url}) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    const idx = profiles.findIndex(x=>x.id===profileId);
+    if (idx>=0) profiles[idx] = data.profile;
+    if (curProfile?.profile.id===profileId) { curProfile.profile=data.profile; renderProfileModal(); }
+    toast('Видео удалено', 'ok');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
 // Прикрепление фото к комментарию
 let _cmImageFile = null;
-function pickCommentImage() { document.getElementById('cmImageInput')?.click(); }
+let _cmVideoFile = null;
+function pickCommentImage() { _cmVideoFile = null; document.getElementById('cmImageInput')?.click(); }
+function pickCommentVideo() { _cmImageFile = null; document.getElementById('cmVideoInput')?.click(); }
 function previewCommentImage(input) {
   _cmImageFile = input.files[0] || null;
+  _cmVideoFile = null;
   const prev = document.getElementById('cmAttachPreview');
   if (!prev) return;
   if (_cmImageFile) {
     const url = URL.createObjectURL(_cmImageFile);
     prev.innerHTML = `<div class="img-attach-preview"><img loading="lazy" decoding="async" src="${url}"><button class="rm" onclick="clearCommentImage()">✕</button></div>`;
+  } else { prev.innerHTML=''; }
+}
+function previewCommentVideo(input) {
+  const file = input.files[0] || null;
+  if (file && file.size > 50 * 1024 * 1024) {
+    toast('Видео больше 50 МБ', 'err');
+    input.value = '';
+    return;
+  }
+  _cmVideoFile = file;
+  _cmImageFile = null;
+  const prev = document.getElementById('cmAttachPreview');
+  if (!prev) return;
+  if (_cmVideoFile) {
+    const url = URL.createObjectURL(_cmVideoFile);
+    const sizeMb = (_cmVideoFile.size / (1024*1024)).toFixed(1);
+    prev.innerHTML = `<div class="img-attach-preview"><video src="${url}" style="max-width:200px;max-height:140px;border-radius:8px;background:#000" muted></video><div style="font-size:11px;color:var(--muted);margin-top:4px">🎬 ${esc(_cmVideoFile.name)} · ${sizeMb} МБ</div><button class="rm" onclick="clearCommentVideo()">✕</button></div>`;
   } else { prev.innerHTML=''; }
 }
 function clearCommentImage() {
@@ -1595,14 +1680,30 @@ function clearCommentImage() {
   const prev = document.getElementById('cmAttachPreview');
   if (prev) prev.innerHTML='';
 }
+function clearCommentVideo() {
+  _cmVideoFile = null;
+  const inp = document.getElementById('cmVideoInput');
+  if (inp) inp.value='';
+  const prev = document.getElementById('cmAttachPreview');
+  if (prev) prev.innerHTML='';
+}
 
 async function sendComment() {
   if (!curProfile || !curUser) return;
   const text = (document.getElementById('cmField')?.value||'').trim();
-  if (!text && !_cmImageFile) return;
+  if (!text && !_cmImageFile && !_cmVideoFile) return;
   try {
     let newComment;
-    if (_cmImageFile) {
+    if (_cmVideoFile) {
+      const fd = new FormData();
+      fd.append('video', _cmVideoFile);
+      if (text) fd.append('text', text);
+      toast('⬆ Загружаю видео...', '');
+      const res = await fetch(`/api/profiles/${curProfile.profile.id}/comments/video`, { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      newComment = data.comment;
+    } else if (_cmImageFile) {
       const fd = new FormData();
       fd.append('image', _cmImageFile);
       if (text) fd.append('text', text);
@@ -1616,6 +1717,7 @@ async function sendComment() {
     }
     if (document.getElementById('cmField')) document.getElementById('cmField').value = '';
     clearCommentImage();
+    clearCommentVideo();
     // Добавляем комментарий локально сразу (не ждём сокет)
     if (newComment && !curProfile.comments.find(x => x.id === newComment.id)) {
       curProfile.comments.push(newComment);
@@ -1829,6 +1931,7 @@ function renderTopicModal() {
           <div class="tp-meta">${timeAgo(p.createdAt)}</div>
           ${p.text?`<div class="tp-content">${linkifyMentions(esc(p.text))}</div>`:''}
           ${p.image?`<img src="${esc(p.image)}" class="post-image" onclick="openLightbox('${esc(p.image)}')" loading="lazy">`:''}
+          ${p.video?`<video src="${esc(p.video)}" class="post-video" controls preload="metadata" playsinline></video>`:''}
         </div>
       </div>
       <div class="tp-actions">
@@ -1845,7 +1948,9 @@ function renderTopicModal() {
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="sendPost()">Ответить</button>
         <button class="img-btn" onclick="pickPostImage()" title="Прикрепить фото">📎 Фото</button>
+        <button class="img-btn" onclick="pickPostVideo()" title="Прикрепить видео">🎬 Видео</button>
         <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="previewPostImage(this)">
+        <input type="file" id="postVideoInput" accept="video/*" style="display:none" onchange="previewPostVideo(this)">
       </div>
     </div>` : `<div style="text-align:center;color:var(--muted);padding:14px"><a onclick="openAuth()" style="cursor:pointer">Войди</a> чтобы ответить</div>`;
 
@@ -1870,14 +1975,34 @@ function renderTopicModal() {
 }
 
 let _postImageFile = null;
-function pickPostImage() { document.getElementById('postImageInput')?.click(); }
+let _postVideoFile = null;
+function pickPostImage() { _postVideoFile = null; document.getElementById('postImageInput')?.click(); }
+function pickPostVideo() { _postImageFile = null; document.getElementById('postVideoInput')?.click(); }
 function previewPostImage(input) {
   _postImageFile = input.files[0] || null;
+  _postVideoFile = null;
   const prev = document.getElementById('postAttachPreview');
   if (!prev) return;
   if (_postImageFile) {
     const url = URL.createObjectURL(_postImageFile);
     prev.innerHTML = `<div class="img-attach-preview"><img loading="lazy" decoding="async" src="${url}"><button class="rm" onclick="clearPostImage()">✕</button></div>`;
+  } else { prev.innerHTML=''; }
+}
+function previewPostVideo(input) {
+  const file = input.files[0] || null;
+  if (file && file.size > 50 * 1024 * 1024) {
+    toast('Видео больше 50 МБ', 'err');
+    input.value = '';
+    return;
+  }
+  _postVideoFile = file;
+  _postImageFile = null;
+  const prev = document.getElementById('postAttachPreview');
+  if (!prev) return;
+  if (_postVideoFile) {
+    const url = URL.createObjectURL(_postVideoFile);
+    const sizeMb = (_postVideoFile.size / (1024*1024)).toFixed(1);
+    prev.innerHTML = `<div class="img-attach-preview"><video src="${url}" style="max-width:240px;max-height:160px;border-radius:8px;background:#000" muted></video><div style="font-size:11px;color:var(--muted);margin-top:4px">🎬 ${esc(_postVideoFile.name)} · ${sizeMb} МБ</div><button class="rm" onclick="clearPostVideo()">✕</button></div>`;
   } else { prev.innerHTML=''; }
 }
 function clearPostImage() {
@@ -1887,14 +2012,30 @@ function clearPostImage() {
   const prev = document.getElementById('postAttachPreview');
   if (prev) prev.innerHTML='';
 }
+function clearPostVideo() {
+  _postVideoFile = null;
+  const inp = document.getElementById('postVideoInput');
+  if (inp) inp.value='';
+  const prev = document.getElementById('postAttachPreview');
+  if (prev) prev.innerHTML='';
+}
 
 async function sendPost() {
   if (!curTopic || !curUser) return;
   const text = (document.getElementById('postField')?.value||'').trim();
-  if (!text && !_postImageFile) return;
+  if (!text && !_postImageFile && !_postVideoFile) return;
   try {
     let newPost;
-    if (_postImageFile) {
+    if (_postVideoFile) {
+      const fd = new FormData();
+      fd.append('video', _postVideoFile);
+      if (text) fd.append('text', text);
+      toast('⬆ Загружаю видео...', '');
+      const res = await fetch(`/api/topics/${curTopic.topic.id}/posts/video`, { method:'POST', credentials:'include', body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      newPost = data.post;
+    } else if (_postImageFile) {
       const fd = new FormData();
       fd.append('image', _postImageFile);
       if (text) fd.append('text', text);
@@ -1908,6 +2049,7 @@ async function sendPost() {
     }
     if (document.getElementById('postField')) document.getElementById('postField').value = '';
     clearPostImage();
+    clearPostVideo();
     // Добавляем пост локально сразу
     if (newPost && !curTopic.posts.find(x => x.id === newPost.id)) {
       curTopic.posts.push(newPost);
